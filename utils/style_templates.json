@@ -1,0 +1,153 @@
+{
+  "default": {
+    "fonts": {
+      "title": {
+        "path": "assets/fonts/Montserrat-Bold.ttf",
+        "size": 48,
+        "color": "white",
+        "box": true,
+        "box_color": "black@0.5",
+        "box_border_width": 10
+      },
+      "subtitle": {
+        "path": "assets/fonts/Montserrat-Regular.ttf",
+        "size": 36,
+        "color": "white",
+        "box": true,
+        "box_color": "black@0.5",
+        "box_border_width": 5
+      }
+    },
+    "video": {
+      "resolution": [1080, 1920],
+      "fps": 30,
+      "background_blur": 10,
+      "text_position": "bottom",
+      "text_padding": 50
+    },
+    "audio": {
+      "fade_in": 0.5,
+      "fade_out": 0.5,
+      "background_music_volume": 0.1
+    },
+    "transitions": {
+      "type": "fade",
+      "duration": 0.5
+    }
+  },
+  "minimal": {
+    "fonts": {
+      "title": {
+        "path": "assets/fonts/Roboto-Bold.ttf",
+        "size": 42,
+        "color": "white",
+        "box": false,
+        "stroke": "black",
+        "stroke_width": 2
+      },
+      "subtitle": {
+        "path": "assets/fonts/Roboto-Regular.ttf",
+        "size": 32,
+        "color": "white",
+        "box": false,
+        "stroke": "black",
+        "stroke_width": 1
+      }
+    },
+    "video": {
+      "resolution": [1080, 1920],
+      "fps": 30,
+      "background_blur": 0,
+      "text_position": "top",
+      "text_padding": 30
+    },
+    "audio": {
+      "fade_in": 0.3,
+      "fade_out": 0.3,
+      "background_music_volume": 0
+    },
+    "transitions": {
+      "type": "none",
+      "duration": 0
+    }
+  },
+  "cinematic": {
+    "fonts": {
+      "title": {
+        "path": "assets/fonts/PlayfairDisplay-Bold.ttf",
+        "size": 52,
+        "color": "white",
+        "box": false,
+        "shadow_color": "black@0.8",
+        "shadow_offset_x": 3,
+        "shadow_offset_y": 3
+      },
+      "subtitle": {
+        "path": "assets/fonts/PlayfairDisplay-Regular.ttf",
+        "size": 40,
+        "color": "white", 
+        "box": false,
+        "shadow_color": "black@0.8",
+        "shadow_offset_x": 2,
+        "shadow_offset_y": 2
+      }
+    },
+    "video": {
+      "resolution": [1080, 1920],
+      "fps": 30,
+      "background_blur": 5,
+      "vignette": true,
+      "text_position": "center",
+      "text_padding": 0
+    },
+    "audio": {
+      "fade_in": 1.0,
+      "fade_out": 1.0,
+      "background_music_volume": 0.15
+    },
+    "transitions": {
+      "type": "crossfade",
+      "duration": 1.0
+    }
+  },
+  "modern": {
+    "fonts": {
+      "title": {
+        "path": "assets/fonts/Raleway-Bold.ttf",
+        "size": 44,
+        "color": "#FFFFFF",
+        "box": true,
+        "box_color": "#000000@0.7",
+        "box_border_width": 8,
+        "animation": "slide_up"
+      },
+      "subtitle": {
+        "path": "assets/fonts/Raleway-Medium.ttf",
+        "size": 34,
+        "color": "#FFFFFF",
+        "box": true,
+        "box_color": "#000000@0.7",
+        "box_border_width": 5,
+        "animation": "slide_up"
+      }
+    },
+    "video": {
+      "resolution": [1080, 1920],
+      "fps": 30,
+      "background_blur": 7,
+      "overlay_color": "#000000@0.2",
+      "text_position": "bottom",
+      "text_padding": 40
+    },
+    "audio": {
+      "fade_in": 0.7,
+      "fade_out": 0.7,
+      "background_music_volume": 0.12
+    },
+    "transitions": {
+      "type": "slide",
+      "direction": "left",
+      "duration": 0.8
+    }
+  }
+} 

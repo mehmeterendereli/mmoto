@@ -1,0 +1,11 @@
+{
+  "openai_api_key": "YOUR_OPENAI_API_KEY",
+  "pexels_api_key": "YOUR_PEXELS_API_KEY",
+  "youtube_api_key": "YOUR_YOUTUBE_API_KEY",
+  "default_tts_voice": "onyx",
+  "font_path": "assets/fonts/Montserrat-Bold.ttf",
+  "video_resolution": [1080, 1920],
+  "closing_video_path": "assets/kapanis.mp4",
+  "ffmpeg_path": "bin/bin/ffmpeg.exe",
+  "ffprobe_path": "bin/bin/ffprobe.exe"
+}

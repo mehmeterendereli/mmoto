@@ -1,0 +1,48 @@
+# API anahtarları ve hassas bilgiler
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Ortam dosyaları
+.env
+.venv
+venv/
+ENV/
+
+# IDE dosyaları
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Çıktı klasörü
+output/
+
+# Sistem dosyaları
+.DS_Store
+Thumbs.db
+
+# Büyük dosyalar (GitHub sınırı: 100MB)
+bin/bin/ffmpeg.exe
+bin/bin/ffprobe.exe
+bin/bin/ffplay.exe
