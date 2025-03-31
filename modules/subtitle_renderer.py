@@ -409,7 +409,8 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                     log_file.write(f"Kelime seviyesinde ASS dosyası oluşturuldu: {ass_path}\n\n")
                 
                 # ASS dosyasını kullanarak altyazı ekle
-                ass_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "ass={ass_path.replace("\\", "/")}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+                ass_path_normalized = ass_path.replace("\\", "/")
+                ass_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "ass={ass_path_normalized}" -c:a copy "{os.path.abspath(subtitled_video)}"'
                 
                 with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
                     log_file.write("--- ASS Altyazı Komutu ---\n")
@@ -544,7 +545,8 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                 log_file.write(f"SRT dosyası oluşturuldu (cümleler ikiye bölündü): {srt_path}\n\n")
         
         # SRT dosyasını kullanarak altyazı ekle (ASS başarısız olduysa veya kelime zamanlamaları yoksa)
-        srt_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "subtitles={srt_path.replace("\\", "/")}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+        srt_path_normalized = srt_path.replace("\\", "/")
+        srt_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "subtitles={srt_path_normalized}" -c:a copy "{os.path.abspath(subtitled_video)}"'
         
         with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
             log_file.write("--- SRT Altyazı Komutu ---\n")

@@ -458,5 +458,31 @@
             "Roof",
             "Window"
         ]
+    },
+    {
+        "topic": "Fransa coğrafyası hakkında bilgi",
+        "project_folder": "video_2025-03-31_05-25-37",
+        "creation_date": "2025-03-31 05:57:48",
+        "keywords": [
+            "alps",
+            "pyrenees",
+            "river"
+        ]
+    },
+    {
+        "topic": "BMW hakkında bilinmeyenler",
+        "project_folder": "video_2025-03-31_14-42-44",
+        "creation_date": "2025-03-31 14:46:17",
+        "keywords": [
+            "education"
+        ]
+    },
+    {
+        "topic": "Sigara neden zararlı ? ",
+        "project_folder": "video_2025-03-31_15-20-01",
+        "creation_date": "2025-03-31 15:36:26",
+        "keywords": [
+            "education"
+        ]
     }
 ]

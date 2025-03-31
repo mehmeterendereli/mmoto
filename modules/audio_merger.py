@@ -86,7 +86,7 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
         # Eğer ses video süresinden daha uzunsa, videoyu yavaşlat
         # Eğer video ses süresinden çok daha uzunsa, videoyu kırp
         if audio_duration > 3 and video_duration > 3:  # Her ikisi de geçerli uzunlukta
-            if audio_duration > video_duration * 1.05:  # Ses %5'den fazla uzunsa (daha hassas)
+            if audio_duration > video_duration * 1.02:  # Ses %2'den fazla uzunsa (daha hassas)
                 print(f"Uyarı: Ses süresi video süresinden %{((audio_duration / video_duration) - 1) * 100:.1f} daha uzun")
                 print("Video sesi uyumlu hale getirmek için düzenlenecek...")
                 
@@ -105,15 +105,15 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
                 except Exception as adjust_error:
                     print(f"Video düzenleme hatası: {str(adjust_error)}")
         
-            elif video_duration > audio_duration * 1.1:  # Video %10'dan fazla uzunsa (daha hassas)
+            elif video_duration > audio_duration * 1.05:  # Video %5'den fazla uzunsa (daha hassas)
                 print(f"Uyarı: Video süresi ses süresinden %{((video_duration / audio_duration) - 1) * 100:.1f} daha uzun")
                 print("Video sese uyumlu hale getirmek için kırpılacak...")
                 
                 # Video süresini sese uygun şekilde kırp
                 trimmed_video = os.path.join(project_folder, "trimmed_video.mp4")
                 
-                # Videoyu ses süresine göre kırp, %5 tolerans ekle (daha hassas)
-                trim_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -t {audio_duration * 1.05} -c:v copy "{os.path.abspath(trimmed_video)}"'
+                # Videoyu ses süresine göre kırp, %10 tolerans ekle (daha hassas)
+                trim_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -t {audio_duration * 1.10} -c:v copy "{os.path.abspath(trimmed_video)}"'
                 
                 try:
                     subprocess.run(trim_cmd, shell=True, check=True)
@@ -156,8 +156,22 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
         if os.path.exists(merged_audio) and os.path.getsize(merged_audio) > 0:
             print("Ses videoya ekleniyor...")
             
+            # Video uzatma stratejisi: Son kareyi 3 saniye daha uzat
+            extended_video = os.path.join(project_folder, "extended_video.mp4")
+            # Son kareyi 3 saniye daha uzat
+            extend_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=3[v]" -map "[v]" -c:v libx264 -pix_fmt yuv420p "{os.path.abspath(extended_video)}"'
+            
+            try:
+                # Videoyu uzat
+                subprocess.run(extend_cmd, shell=True, check=True)
+                if os.path.exists(extended_video) and os.path.getsize(extended_video) > 0:
+                    print(f"Video son kare eklenerek uzatıldı: {extended_video}")
+                    video_path = extended_video
+            except Exception as extend_error:
+                print(f"Video uzatma hatası: {str(extend_error)}")
+            
             # Ses ve videoya uygun bir encoder seç, daha yüksek ses kalitesi
-            audio_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(merged_audio)}" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 256k -shortest -af "aresample=async=1000" "{os.path.abspath(audio_video)}"'
+            audio_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(merged_audio)}" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 256k -af "aresample=async=1000" "{os.path.abspath(audio_video)}"'
             
             try:
                 subprocess.run(audio_cmd, shell=True, check=True)
@@ -198,6 +212,8 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
                 os.remove(os.path.join(project_folder, "adjusted_video.mp4"))
             if os.path.exists(os.path.join(project_folder, "trimmed_video.mp4")):
                 os.remove(os.path.join(project_folder, "trimmed_video.mp4"))
+            if os.path.exists(os.path.join(project_folder, "extended_video.mp4")):
+                os.remove(os.path.join(project_folder, "extended_video.mp4"))
         except Exception as e:
             print(f"Geçici dosya silme hatası: {str(e)}")
         
