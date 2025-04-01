@@ -209,20 +209,18 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
                         x_offset = int((width - square_size) / 2)
                         y_offset = int((height - square_size) / 2)
                         
-                        # Geçici kare video dosyası oluştur
-                        temp_square = os.path.join(project_folder, f"temp_square_{i+1}.mp4")
-                        
                         # 2. Adım: Orijinal videoyu bulanıklaştır ve 9:16 formata scale et
                         # 3. Adım: Kare kırpılmış videoyu 9:16 formatın ortasına yerleştir
+                        # 4. Adım: SAR değerini 1:1 olarak ayarla
                         blur_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -filter_complex ' + \
-                                  f'"[0:v]crop={square_size}:{square_size}:{x_offset}:{y_offset},scale={resolution[0]}:{resolution[0]}[fg]; ' + \
-                                  f'[0:v]scale={resolution[0]}:{resolution[1]},boxblur=20:5[bg]; ' + \
+                                  f'"[0:v]crop={square_size}:{square_size}:{x_offset}:{y_offset},scale={resolution[0]}:{resolution[0]},setsar=1:1[fg]; ' + \
+                                  f'[0:v]scale={resolution[0]}:{resolution[1]},boxblur=20:5,setsar=1:1[bg]; ' + \
                                   f'[bg][fg]overlay=(W-w)/2:({resolution[1]}-{resolution[0]})/2" ' + \
                                   f'-c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
                         
                         crop_cmd = blur_cmd
                     else:  # Video daha dar veya tam 9:16, ölçeklendir
-                        scale_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -vf "scale={resolution[0]}:{resolution[1]}" -c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
+                        scale_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -vf "scale={resolution[0]}:{resolution[1]},setsar=1:1" -c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
                         crop_cmd = scale_cmd
                     
                     print(f"Video işleniyor ({i+1}/{len(selected_videos)}): {video_path}")
@@ -268,13 +266,19 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
             # Birleştirilmiş video yolu
             processed_video_path = os.path.join(project_folder, "processed_video.mp4")
             
-            # Birleştirme komutu
-            concat_cmd = f'"{ffmpeg_path}" -f concat -safe 0 -i "{concat_list_path}" -c:v libx264 -preset medium -crf 20 -profile:v high -pix_fmt yuv420p -r 30 -vsync cfr -b:v 5M -maxrate 5M -bufsize 5M "{processed_video_path}"'
+            # SAR değerini 1:1 olarak ayarla
+            concat_cmd = f'"{ffmpeg_path}" -f concat -safe 0 -i "{concat_list_path}" -vf "setsar=1:1" -c:v libx264 -preset medium -crf 20 -profile:v high -pix_fmt yuv420p -r 30 -vsync cfr -b:v 5M -maxrate 5M -bufsize 5M "{processed_video_path}"'
             
             try:
                 print("Videolar birleştiriliyor...")
                 print(f"Birleştirme komutu: {concat_cmd}")
                 subprocess.run(concat_cmd, shell=True, check=True)
+                
+                # Geçici dosyaları temizleme
+                try:
+                    os.remove(concat_list_path)
+                except Exception as e:
+                    print(f"Video birleştirme hatası: {str(e)}")
                 
                 if os.path.exists(processed_video_path) and os.path.getsize(processed_video_path) > 0:
                     print(f"Videolar başarıyla birleştirildi: {processed_video_path}")
@@ -286,9 +290,18 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
                 print(f"Video birleştirme hatası: {str(e)}")
                 # Hata durumunda ilk videoyu döndür
                 return processed_videos[0][0]
+        elif len(processed_videos) == 1:
+            # Tek video varsa işlenmiş video yolu
+            processed_video_path = os.path.join(project_folder, "processed_video.mp4")
+            video_path, _ = processed_videos[0]
+            
+            # SAR değerini 1:1 olarak ayarla
+            sar_cmd = f'"{ffmpeg_path}" -i "{video_path}" -vf "setsar=1:1" -c:v libx264 -preset medium -crf 20 -profile:v high -pix_fmt yuv420p -r 30 -b:v 5M -maxrate 5M -bufsize 5M "{processed_video_path}"'
+            subprocess.run(sar_cmd, shell=True, check=True)
+            
+            return processed_video_path
         else:
-            # Tek video ise direkt döndür
-            return processed_videos[0][0]
+            raise ValueError("Hiç video işlenemedi")
     
     except Exception as e:
         print(f"Video işleme genel hatası: {str(e)}")

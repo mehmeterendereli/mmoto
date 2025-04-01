@@ -14,7 +14,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -23,20 +22,39 @@ var/
 .installed.cfg
 *.egg
 
-# Ortam dosyaları
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
 .env
 .venv
+env/
 venv/
 ENV/
+env.bak/
+venv.bak/
 
-# IDE dosyaları
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Çıktı klasörü
+# Project specific
 output/
+stats/
+**/temp_data/
+*.mp4
+*.mp3
+*.wav
+
+# Except for the kapanis.mp4 which is part of the app
+!assets/kapanis.mp4
+
+# Secrets
+.env
+config.ini
+api_keys.py
 
 # Sistem dosyaları
 .DS_Store

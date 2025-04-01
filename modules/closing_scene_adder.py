@@ -58,8 +58,8 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
         
         print("Kapanış sahnesi ekleniyor...")
         
-        # Direkt olarak filter_complex kullanarak videoları birleştirme (en güvenilir yöntem)
-        filter_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(closing_video_path)}" -filter_complex "[0:v:0][0:a:0][1:v:0][1:a:0]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac "{os.path.abspath(final_video)}"'
+        # SAR değerlerini düzeltmek için önce her iki videoyu setsar=1:1 ile işle
+        filter_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(closing_video_path)}" -filter_complex "[0:v]setsar=1:1[v1]; [1:v]setsar=1:1[v2]; [v1][0:a:0][v2][1:a:0]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac "{os.path.abspath(final_video)}"'
         
         try:
             # Direct filter_complex yöntemi
@@ -81,9 +81,9 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
             video1_ts = os.path.join(project_folder, "video1.ts")
             video2_ts = os.path.join(project_folder, "video2.ts")
             
-            # Videoları TS formatına açıkça ses kanalını koruyarak dönüştür
-            ts1_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -c:v copy -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video1_ts)}"'
-            ts2_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -c:v copy -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video2_ts)}"'
+            # Videoları TS formatına setsar=1:1 filtresi ile dönüştür
+            ts1_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video1_ts)}"'
+            ts2_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video2_ts)}"'
             
             try:
                 # Video 1 TS'e dönüştür
@@ -114,14 +114,25 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
             except Exception as ts_error:
                 print(f"TS dönüştürme hatası: {str(ts_error)}")
                 
-                # Üçüncü yöntem: MP4Box kullanarak birleştirme
+                # Üçüncü yöntem: Videolara uyumlu SAR değeri verip liste dosyası ile birleştirme
                 print("Liste dosyası yöntemi deneniyor...")
                 try:
+                    # SAR değerleri düzeltilmiş videolar oluştur
+                    fixed_video = os.path.join(project_folder, "fixed_video.mp4")
+                    fixed_closing = os.path.join(project_folder, "fixed_closing.mp4")
+                    
+                    # SAR değerlerini düzelt
+                    fix_cmd1 = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy "{os.path.abspath(fixed_video)}"'
+                    fix_cmd2 = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy "{os.path.abspath(fixed_closing)}"'
+                    
+                    subprocess.run(fix_cmd1, shell=True, check=True)
+                    subprocess.run(fix_cmd2, shell=True, check=True)
+                    
                     # Liste dosyası oluştur
                     list_file_path = os.path.join(project_folder, "concat_list.txt")
                     with open(list_file_path, 'w', encoding='utf-8') as f:
-                        f.write(f"file '{os.path.abspath(video_path)}'\n")
-                        f.write(f"file '{os.path.abspath(closing_video_path)}'\n")
+                        f.write(f"file '{os.path.abspath(fixed_video)}'\n")
+                        f.write(f"file '{os.path.abspath(fixed_closing)}'\n")
                     
                     # Liste dosyasını kullanarak birleştir
                     list_cmd = f'"{ffmpeg_path}" -f concat -safe 0 -i "{list_file_path}" -c copy "{os.path.abspath(final_video)}"'
@@ -137,6 +148,10 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
                     try:
                         if os.path.exists(list_file_path):
                             os.remove(list_file_path)
+                        if os.path.exists(fixed_video) and fixed_video != video_path:
+                            os.remove(fixed_video)
+                        if os.path.exists(fixed_closing) and fixed_closing != closing_video_path:
+                            os.remove(fixed_closing)
                     except Exception as e:
                         print(f"Geçici dosya silme hatası: {str(e)}")
                     

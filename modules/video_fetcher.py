@@ -390,7 +390,7 @@ async def download_video(video_url: str, destination: str) -> str:
         return ""
 
 async def fetch_videos(keywords: List[str], api_key: str, openai_api_key: str, topic: str, content: List[str], 
-                       project_folder: str, min_score: float = 7.0) -> List[str]:
+                       project_folder: str, min_score: float = 5.0) -> List[str]:
     """
     Anahtar kelimelere göre video arar, alakalılığı değerlendirir ve indirir
     

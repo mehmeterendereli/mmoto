@@ -518,5 +518,45 @@
             "cliff",
             "sakura"
         ]
+    },
+    {
+        "topic": "Kuantum Bilgisayarlar Nasıl Çalışır?",
+        "project_folder": "video_2025-04-01_23-43-56",
+        "creation_date": "2025-04-01 23:45:10",
+        "keywords": [
+            "qubit",
+            "entanglement",
+            "computation"
+        ]
+    },
+    {
+        "topic": "Kuantum Bilgisayarlar Nas?l ?al???r?",
+        "project_folder": "video_2025-04-01_23-47-37",
+        "creation_date": "2025-04-01 23:48:50",
+        "keywords": [
+            "quantum",
+            "qubit",
+            "superposition"
+        ]
+    },
+    {
+        "topic": "Kuantum Bilgisayarlar",
+        "project_folder": "video_2025-04-01_23-54-52",
+        "creation_date": "2025-04-01 23:56:07",
+        "keywords": [
+            "Quantum",
+            "Computers",
+            "Laboratory"
+        ]
+    },
+    {
+        "topic": "Yapay Zeka",
+        "project_folder": "video_2025-04-01_23-59-21",
+        "creation_date": "2025-04-02 00:01:48",
+        "keywords": [
+            "computer",
+            "technology",
+            "automation"
+        ]
     }
 ]
