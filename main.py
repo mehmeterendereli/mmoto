@@ -18,6 +18,7 @@ from modules.subtitle_renderer import render_subtitles
 from modules.audio_merger import merge_audio
 from modules.closing_scene_adder import add_closing_scene
 from modules.metadata_writer import write_metadata
+from modules.youtube_uploader import YouTubeUploader
 
 def load_config():
     """Konfigürasyon dosyasını yükler"""
@@ -59,7 +60,7 @@ async def async_main():
             topic, 
             content_data["response"], 
             project_folder, 
-            min_score=7.0
+            min_score=5.0  # 7.0'dan 5.0'a düşürüldü
         )
         logger.info(f"{len(videos)} adet video indirildi")
         
@@ -86,10 +87,65 @@ async def async_main():
         logger.info("Kapanış sahnesi eklendi")
         
         # Metadata oluştur
-        write_metadata(project_folder, topic, keywords, "gpt-4o", config["default_tts_voice"])
+        metadata = write_metadata(project_folder, topic, keywords, "gpt-4o", config["default_tts_voice"])
         logger.info("Metadata oluşturuldu")
         
         logger.info(f"İşlem tamamlandı! Final video: {final_video}")
+        
+        # Kullanıcıya YouTube'a yükleme seçeneği sun
+        upload_choice = input("Video YouTube'a yüklensin mi? (e/h): ")
+        
+        if upload_choice.lower() in ['e', 'evet', 'y', 'yes']:
+            try:
+                # YouTube yükleyiciyi başlat
+                uploader = YouTubeUploader(
+                    client_secrets_file=os.path.join(os.path.dirname(__file__), "client_secret.json"),
+                    credentials_file=os.path.join(os.path.dirname(__file__), "youtube_token.json")
+                )
+                
+                # Video başlığını hazırla
+                video_title = metadata.get("title", topic)
+                if len(video_title) > 100:  # YouTube başlık limiti
+                    video_title = video_title[:97] + "..."
+                
+                # Video açıklamasını hazırla
+                video_description = metadata.get("content", "")
+                if len(video_description) > 5000:  # YouTube açıklama limiti
+                    video_description = video_description[:4997] + "..."
+                
+                # Etiketleri hazırla
+                video_tags = metadata.get("keywords", [])
+                # Shorts etiketlerini ekle
+                video_tags.extend(["Shorts", "kısavideo", "bilgi"])
+                
+                # Kategori seç (varsayılan: eğitim)
+                video_category = "education"
+                
+                logger.info("Video YouTube'a yükleniyor...")
+                
+                # Videoyu yükle
+                result = uploader.upload_video(
+                    video_path=final_video,
+                    title=video_title,
+                    description=video_description,
+                    tags=video_tags,
+                    category=video_category,
+                    privacy_status="public",  # veya "unlisted", "private"
+                    is_shorts=True
+                )
+                
+                if result["success"]:
+                    logger.info(f"Video başarıyla YouTube'a yüklendi: {result['video_url']}")
+                    logger.info(f"Shorts URL: {result['shorts_url']}")
+                    print(f"Video YouTube'a yüklendi: {result['video_url']}")
+                    print(f"Shorts URL: {result['shorts_url']}")
+                else:
+                    logger.error(f"YouTube yükleme hatası: {result['error']}")
+                    print(f"YouTube yükleme hatası: {result['error']}")
+            
+            except Exception as e:
+                logger.error(f"YouTube yükleme işlemi sırasında hata: {str(e)}")
+                print(f"YouTube yükleme hatası: {str(e)}")
         
     except Exception as e:
         logger.error(f"Hata oluştu: {str(e)}", exc_info=True)
