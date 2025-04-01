@@ -4,6 +4,7 @@
 import json
 import os
 import logging
+import asyncio
 from datetime import datetime
 
 # Modülleri import et
@@ -23,7 +24,7 @@ def load_config():
     with open('config.json', 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def main():
+async def async_main():
     # Loglama ayarları
     logging.basicConfig(
         level=logging.INFO,
@@ -50,8 +51,16 @@ def main():
         keywords = extract_keywords(content_data["response"], topic)
         logger.info(f"Anahtar kelimeler: {keywords}")
         
-        # Videoları getir
-        videos = fetch_videos(keywords, config["pexels_api_key"], project_folder)
+        # Yeni asenkron video getirme fonksiyonunu kullan
+        videos = await fetch_videos(
+            keywords, 
+            config["pexels_api_key"], 
+            config["openai_api_key"], 
+            topic, 
+            content_data["response"], 
+            project_folder, 
+            min_score=7.0
+        )
         logger.info(f"{len(videos)} adet video indirildi")
         
         # Videoları işle
@@ -84,6 +93,10 @@ def main():
         
     except Exception as e:
         logger.error(f"Hata oluştu: {str(e)}", exc_info=True)
+
+def main():
+    """Normal şekilde çağrılan ana fonksiyon, asenkron işlemleri yönetir"""
+    asyncio.run(async_main())
 
 if __name__ == "__main__":
     main()

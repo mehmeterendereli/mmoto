@@ -201,9 +201,26 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
             if resolution[0] / resolution[1] == 9/16:  # 9:16 formatı (dikey video)
                 try:
                     # Videonun orijinal en-boy oranını koru, ancak 9:16 formatına uydur
-                    if width / height > 9/16:  # Video daha geniş, merkezi kırp
-                        new_width = int(height * 9/16)
-                        crop_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -vf "crop={new_width}:{height}:({width}-{new_width})/2:0,scale={resolution[0]}:{resolution[1]}" -c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
+                    if width / height > 9/16:  # Video daha geniş (tipik 16:9 formatı)
+                        # Yeni yaklaşım: Video içeriğini 1:1 olarak al, üst ve alt kısımları bulanıklaştırılmış video ile doldur
+                        # 1. Adım: Videoyu kare (1:1) formata kırp
+                        square_size = min(width, height)
+                        # Video genişse, en önemli içerik ortada olma ihtimali yüksek
+                        x_offset = int((width - square_size) / 2)
+                        y_offset = int((height - square_size) / 2)
+                        
+                        # Geçici kare video dosyası oluştur
+                        temp_square = os.path.join(project_folder, f"temp_square_{i+1}.mp4")
+                        
+                        # 2. Adım: Orijinal videoyu bulanıklaştır ve 9:16 formata scale et
+                        # 3. Adım: Kare kırpılmış videoyu 9:16 formatın ortasına yerleştir
+                        blur_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -filter_complex ' + \
+                                  f'"[0:v]crop={square_size}:{square_size}:{x_offset}:{y_offset},scale={resolution[0]}:{resolution[0]}[fg]; ' + \
+                                  f'[0:v]scale={resolution[0]}:{resolution[1]},boxblur=20:5[bg]; ' + \
+                                  f'[bg][fg]overlay=(W-w)/2:({resolution[1]}-{resolution[0]})/2" ' + \
+                                  f'-c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
+                        
+                        crop_cmd = blur_cmd
                     else:  # Video daha dar veya tam 9:16, ölçeklendir
                         scale_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -vf "scale={resolution[0]}:{resolution[1]}" -c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
                         crop_cmd = scale_cmd

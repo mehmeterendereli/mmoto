@@ -58,84 +58,97 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
         
         print("Kapanış sahnesi ekleniyor...")
         
-        # Her iki videoyu da doğrudan birleştirmek yerine önce formatları eşleştirelim
-        # Ana video formatını al
-        temp_closing = os.path.join(project_folder, "temp_closing.mp4")
-        try:
-            probe_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -show_streams -select_streams v -show_format -print_format json'
-            probe_result = subprocess.run(probe_cmd, shell=True, capture_output=True, text=True)
-            video_info = json.loads(probe_result.stdout)
-            
-            # Ana videonun özelliklerini kapat
-            width = 1080
-            height = 1920
-            if 'streams' in video_info and video_info['streams']:
-                width = video_info['streams'][0].get('width', 1080)
-                height = video_info['streams'][0].get('height', 1920)
-            
-            # Kapanış videosunu aynı formata dönüştür
-            convert_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -vf "scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -pix_fmt yuv420p "{os.path.abspath(temp_closing)}"'
-            subprocess.run(convert_cmd, shell=True, check=True)
-            
-            # Kapanış videosu başarıyla dönüştürüldüyse, onu kullan
-            if os.path.exists(temp_closing) and os.path.getsize(temp_closing) > 0:
-                closing_video_path = temp_closing
-            
-        except Exception as e:
-            print(f"Video bilgisi alınamadı veya dönüştürme hatası: {str(e)}")
-        
-        # İki video arasında, filtergraph olmadan, temp dosyaları kullanarak işlem yap
-        # Her iki videoyu da TS formatına dönüştürelim
-        video1_ts = os.path.join(project_folder, "video1.ts")
-        video2_ts = os.path.join(project_folder, "video2.ts")
-        
-        # Videoları TS formatına dönüştür
-        ts1_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -c copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video1_ts)}"'
-        ts2_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -c copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video2_ts)}"'
+        # Direkt olarak filter_complex kullanarak videoları birleştirme (en güvenilir yöntem)
+        filter_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(closing_video_path)}" -filter_complex "[0:v:0][0:a:0][1:v:0][1:a:0]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac "{os.path.abspath(final_video)}"'
         
         try:
-            # Video 1 TS'e dönüştür
-            subprocess.run(ts1_cmd, shell=True, check=True)
-            # Video 2 TS'e dönüştür
-            subprocess.run(ts2_cmd, shell=True, check=True)
-            
-            # İki TS dosyasını birleştirerek MP4 oluştur
-            concat_cmd = f'"{ffmpeg_path}" -i "concat:{os.path.abspath(video1_ts)}|{os.path.abspath(video2_ts)}" -c copy -bsf:a aac_adtstoasc "{os.path.abspath(final_video)}"'
-            subprocess.run(concat_cmd, shell=True, check=True)
+            # Direct filter_complex yöntemi
+            print("Filter complex yöntemi kullanılıyor...")
+            subprocess.run(filter_cmd, shell=True, check=True)
             
             # Başarılı mı kontrol et
             if os.path.exists(final_video) and os.path.getsize(final_video) > 0:
                 print(f"Kapanış sahnesi başarıyla eklendi: {final_video}")
+                return final_video
             else:
-                raise Exception("Final video oluşturulamadı")
+                raise Exception("Filter complex başarısız")
                 
         except Exception as e:
-            print(f"TS birleştirme hatası: {str(e)}")
+            print(f"Filter complex hatası: {str(e)}")
+            
+            # İkinci yöntem: TS formatına dönüştürme
+            print("TS formatı yöntemi deneniyor...")
+            video1_ts = os.path.join(project_folder, "video1.ts")
+            video2_ts = os.path.join(project_folder, "video2.ts")
+            
+            # Videoları TS formatına açıkça ses kanalını koruyarak dönüştür
+            ts1_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -c:v copy -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video1_ts)}"'
+            ts2_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -c:v copy -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video2_ts)}"'
+            
             try:
-                # Başarısız olursa alternatif yöntem dene - filter_complex
-                filter_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(closing_video_path)}" -filter_complex "[0:v][1:v]concat=n=2:v=1:a=0[outv]" -map "[outv]" "{os.path.abspath(final_video)}"'
-                subprocess.run(filter_cmd, shell=True, check=True)
+                # Video 1 TS'e dönüştür
+                subprocess.run(ts1_cmd, shell=True, check=True)
+                # Video 2 TS'e dönüştür
+                subprocess.run(ts2_cmd, shell=True, check=True)
                 
+                # İki TS dosyasını birleştir, ses kanalını koru
+                concat_cmd = f'"{ffmpeg_path}" -i "concat:{os.path.abspath(video1_ts)}|{os.path.abspath(video2_ts)}" -c:v copy -c:a copy -bsf:a aac_adtstoasc "{os.path.abspath(final_video)}"'
+                subprocess.run(concat_cmd, shell=True, check=True)
+                
+                # Başarılı mı kontrol et
                 if os.path.exists(final_video) and os.path.getsize(final_video) > 0:
-                    print("Alternatif birleştirme başarılı")
+                    print(f"Kapanış sahnesi başarıyla eklendi (TS yöntemi): {final_video}")
                 else:
-                    raise Exception("Alternatif birleştirme başarısız")
-            except Exception as filter_error:
-                print(f"Filter birleştirme hatası: {str(filter_error)}")
-                # Son çare olarak orijinal videoyu kopyala
-                shutil.copy2(video_path, final_video)
-                print(f"Birleştirme başarısız, orijinal video kullanıldı: {final_video}")
-        
-        # Geçici dosyaları temizle
-        try:
-            for temp_file in [video1_ts, video2_ts, temp_closing]:
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-        except Exception as e:
-            print(f"Geçici dosya silme hatası: {str(e)}")
-        
-        return final_video
-        
+                    raise Exception("TS birleştirme başarısız")
+                
+                # Geçici dosyaları temizle
+                try:
+                    for temp_file in [video1_ts, video2_ts]:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                except Exception as e:
+                    print(f"Geçici dosya silme hatası: {str(e)}")
+                
+                return final_video
+                    
+            except Exception as ts_error:
+                print(f"TS dönüştürme hatası: {str(ts_error)}")
+                
+                # Üçüncü yöntem: MP4Box kullanarak birleştirme
+                print("Liste dosyası yöntemi deneniyor...")
+                try:
+                    # Liste dosyası oluştur
+                    list_file_path = os.path.join(project_folder, "concat_list.txt")
+                    with open(list_file_path, 'w', encoding='utf-8') as f:
+                        f.write(f"file '{os.path.abspath(video_path)}'\n")
+                        f.write(f"file '{os.path.abspath(closing_video_path)}'\n")
+                    
+                    # Liste dosyasını kullanarak birleştir
+                    list_cmd = f'"{ffmpeg_path}" -f concat -safe 0 -i "{list_file_path}" -c copy "{os.path.abspath(final_video)}"'
+                    subprocess.run(list_cmd, shell=True, check=True)
+                    
+                    # Başarılı mı kontrol et
+                    if os.path.exists(final_video) and os.path.getsize(final_video) > 0:
+                        print(f"Kapanış sahnesi başarıyla eklendi (Liste yöntemi): {final_video}")
+                    else:
+                        raise Exception("Liste birleştirme başarısız")
+                    
+                    # Geçici dosyaları temizle
+                    try:
+                        if os.path.exists(list_file_path):
+                            os.remove(list_file_path)
+                    except Exception as e:
+                        print(f"Geçici dosya silme hatası: {str(e)}")
+                    
+                    return final_video
+                
+                except Exception as list_error:
+                    print(f"Liste dosyası hatası: {str(list_error)}")
+                    # Son çare olarak orijinal videoyu kopyala
+                    shutil.copy2(video_path, final_video)
+                    print(f"Tüm birleştirme yöntemleri başarısız, orijinal video kullanıldı: {final_video}")
+                    return final_video
+    
     except Exception as e:
         print(f"Kapanış sahnesi ekleme hatası: {str(e)}")
         

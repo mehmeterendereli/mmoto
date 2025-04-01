@@ -458,5 +458,65 @@
             "Roof",
             "Window"
         ]
+    },
+    {
+        "topic": "Mısır lanetleri",
+        "project_folder": "video_2025-04-01_18-55-57",
+        "creation_date": "2025-04-01 18:58:01",
+        "keywords": [
+            "tomb",
+            "pharaoh",
+            "archaeology"
+        ]
+    },
+    {
+        "topic": "Vahşi hayvanlar",
+        "project_folder": "video_2025-04-01_19-21-48",
+        "creation_date": "2025-04-01 19:23:37",
+        "keywords": [
+            "Lion",
+            "Elephant",
+            "Giraffe"
+        ]
+    },
+    {
+        "topic": "Penguenler neden uçamaz",
+        "project_folder": "video_2025-04-01_19-29-18",
+        "creation_date": "2025-04-01 19:31:07",
+        "keywords": [
+            "penguin",
+            "swim",
+            "fish"
+        ]
+    },
+    {
+        "topic": "Hızlı arabalar",
+        "project_folder": "video_2025-04-01_19-34-30",
+        "creation_date": "2025-04-01 19:36:32",
+        "keywords": [
+            "car",
+            "speed",
+            "engine"
+        ]
+    },
+    {
+        "topic": "Atlar hakkında bilgi",
+        "project_folder": "video_2025-04-01_19-38-42",
+        "creation_date": "2025-04-01 19:40:41",
+        "keywords": [
+            "horse",
+            "gallop",
+            "mane"
+        ]
+    },
+    {
+        "topic": "Dünyanın en iyi manzaraya sahip yerleri",
+        "project_folder": "video_2025-04-01_19-48-38",
+        "creation_date": "2025-04-01 19:51:04",
+        "keywords": [
+            "waterfall",
+            "cliff",
+            "sakura"
+        ]
     }
 ]
