@@ -92,60 +92,65 @@ async def async_main():
         
         logger.info(f"İşlem tamamlandı! Final video: {final_video}")
         
-        # Kullanıcıya YouTube'a yükleme seçeneği sun
+        # YouTube'a video yükleme
         upload_choice = input("Video YouTube'a yüklensin mi? (e/h): ")
-        
-        if upload_choice.lower() in ['e', 'evet', 'y', 'yes']:
+        if upload_choice.lower() in ["e", "evet", "y", "yes"]:
             try:
-                # YouTube yükleyiciyi başlat
-                uploader = YouTubeUploader(
-                    client_secrets_file=os.path.join(os.path.dirname(__file__), "client_secret.json"),
-                    credentials_file=os.path.join(os.path.dirname(__file__), "youtube_token.json")
-                )
+                # Başlık ve açıklama hazırla (YouTube karakter limitleri: başlık 100, açıklama 5000)
+                title = metadata.get("title", "Otomatik Oluşturulmuş Video")
+                if len(title) > 100:
+                    title = title[:97] + "..."
+                    
+                description = metadata.get("content", "")
+                if len(description) > 5000:
+                    description = description[:4997] + "..."
                 
-                # Video başlığını hazırla
-                video_title = metadata.get("title", topic)
-                if len(video_title) > 100:  # YouTube başlık limiti
-                    video_title = video_title[:97] + "..."
+                # Video etiketleri hazırla
+                tags = metadata.get("keywords", []) + ["Shorts", "kısavideo"]
                 
-                # Video açıklamasını hazırla
-                video_description = metadata.get("content", "")
-                if len(video_description) > 5000:  # YouTube açıklama limiti
-                    video_description = video_description[:4997] + "..."
+                # YouTube uploader'ı başlat
+                uploader = YouTubeUploader()
                 
-                # Etiketleri hazırla
-                video_tags = metadata.get("keywords", [])
-                # Shorts etiketlerini ekle
-                video_tags.extend(["Shorts", "kısavideo", "bilgi"])
-                
-                # Kategori seç (varsayılan: eğitim)
-                video_category = "education"
-                
-                logger.info("Video YouTube'a yükleniyor...")
-                
-                # Videoyu yükle
                 result = uploader.upload_video(
                     video_path=final_video,
-                    title=video_title,
-                    description=video_description,
-                    tags=video_tags,
-                    category=video_category,
-                    privacy_status="public",  # veya "unlisted", "private"
-                    is_shorts=True
+                    title=title,
+                    description=description,
+                    tags=tags,
+                    category="22",  # İnsanlar ve Bloglar
+                    privacy_status="public",  # public, private veya unlisted
+                    is_shorts=True  # YouTube Shorts olarak yükle
                 )
                 
-                if result["success"]:
-                    logger.info(f"Video başarıyla YouTube'a yüklendi: {result['video_url']}")
-                    logger.info(f"Shorts URL: {result['shorts_url']}")
-                    print(f"Video YouTube'a yüklendi: {result['video_url']}")
-                    print(f"Shorts URL: {result['shorts_url']}")
+                if result and result.get("success", False):
+                    if result.get("video_id"):
+                        logger.info(f"Video başarıyla YouTube'a yüklendi: {result.get('video_url', '')}")
+                        print(f"Video YouTube'a yüklendi: {result.get('video_url', '')}")
+                        
+                        if result.get('shorts_url'):
+                            print(f"Shorts URL: {result.get('shorts_url', '')}")
+                        
+                        # Metadata'ya YouTube bilgilerini de ekle
+                        metadata["youtube_url"] = result.get("video_url", "")
+                        metadata["youtube_shorts_url"] = result.get("shorts_url", "")
+                        metadata["youtube_video_id"] = result.get("video_id", "")
+                        
+                        # Güncellenmiş metadata'yı kaydet
+                        metadata_path = os.path.join(project_folder, "metadata.json")
+                        with open(metadata_path, "w", encoding="utf-8") as f:
+                            json.dump(metadata, f, ensure_ascii=False, indent=2)
+                    else:
+                        # Video ID yoksa, manuel yükleme mesajını göster
+                        logger.info(f"Video kopyalandı ama ID alınmadı: {result.get('message', '')}")
+                        print(f"Bilgi: {result.get('message', 'Video yükleme tamamlandı fakat ID alınamadı')}")
                 else:
-                    logger.error(f"YouTube yükleme hatası: {result['error']}")
-                    print(f"YouTube yükleme hatası: {result['error']}")
-            
+                    error_msg = result.get('error', 'Bilinmeyen hata') if result else "Yükleme sonucu alınamadı"
+                    logger.error(f"YouTube yükleme hatası: {error_msg}")
+                    print(f"YouTube yükleme hatası: {error_msg}")
+                    
             except Exception as e:
-                logger.error(f"YouTube yükleme işlemi sırasında hata: {str(e)}")
-                print(f"YouTube yükleme hatası: {str(e)}")
+                error_msg = f"YouTube yükleme işlemi sırasında hata: {str(e)}"
+                logger.error(error_msg)
+                print(error_msg)
         
     except Exception as e:
         logger.error(f"Hata oluştu: {str(e)}", exc_info=True)

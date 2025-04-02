@@ -1,0 +1,7 @@
+{
+  "title": "Örnek Video Başlığı",
+  "description": "Bu video örnek bir açıklamadır.\n\nBuraya video hakkında detaylı açıklama yazabilirsiniz.\n\nBağlantılar ekleyebilirsiniz: https://example.com",
+  "tags": ["örnek", "video", "youtube"],
+  "categoryId": "28",
+  "privacyStatus": "public"
+} 

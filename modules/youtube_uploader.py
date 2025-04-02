@@ -4,110 +4,39 @@
 import os
 import json
 import time
-import http.client
-import httplib2
-import random
+import subprocess
+import shutil
 import logging
 from datetime import datetime
-
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaFileUpload
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-
-# YouTube API için gerekli izinler
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 
-          'https://www.googleapis.com/auth/youtube']
-
-YOUTUBE_API_SERVICE_NAME = "youtube"
-YOUTUBE_API_VERSION = "v3"
-
-# YouTube kategorileri
-YOUTUBE_CATEGORIES = {
-    "film_animation": 1,
-    "autos_vehicles": 2,
-    "music": 10,
-    "pets_animals": 15,
-    "sports": 17,
-    "travel_events": 19,
-    "gaming": 20,
-    "people_blogs": 22,
-    "comedy": 23,
-    "entertainment": 24,
-    "news_politics": 25,
-    "howto_style": 26,
-    "education": 27,
-    "science_technology": 28
-}
+from glob import glob
 
 class YouTubeUploader:
-    """YouTube'a video yüklemek için kullanılan sınıf"""
+    """YouTube'a video yüklemek için Node.js MMotoYT uygulamasını kullanan sınıf"""
     
-    def __init__(self, client_secrets_file="client_secret.json", credentials_file="youtube_token.json"):
+    def __init__(self):
         """
         YouTube yükleyici sınıfını başlatır
-        
-        Args:
-            client_secrets_file (str): Google API Client Secret dosyası
-            credentials_file (str): Kayıtlı oturum bilgisi dosyası
         """
-        self.client_secrets_file = client_secrets_file
-        self.credentials_file = credentials_file
-        self.youtube = None
+        self.mmoto_yt_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "MMotoYT")
         self.logger = logging.getLogger("merak_makinesi")
     
     def authenticate(self):
         """
-        YouTube API için kimlik doğrulama yapar
+        YouTube API için kimlik doğrulama yapar - MMotoYT uygulaması otomatik yapıyor
         
         Returns:
             bool: Kimlik doğrulama başarılı ise True, değilse False
         """
-        credentials = None
-        
-        # Daha önce oluşturulmuş kimlik bilgilerini kontrol et
-        if os.path.exists(self.credentials_file):
-            try:
-                credentials = Credentials.from_authorized_user_info(
-                    json.load(open(self.credentials_file)), SCOPES)
-            except Exception as e:
-                self.logger.error(f"Kimlik bilgileri yüklenirken hata: {str(e)}")
-        
-        # Kimlik bilgilerinin geçerli olup olmadığını kontrol et
-        if not credentials or not credentials.valid:
-            if credentials and credentials.expired and credentials.refresh_token:
-                try:
-                    credentials.refresh(Request())
-                except Exception as e:
-                    self.logger.error(f"Kimlik bilgileri yenilenirken hata: {str(e)}")
-                    credentials = None
-            
-            # Yeni kimlik bilgileri oluştur
-            if not credentials:
-                try:
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        self.client_secrets_file, SCOPES)
-                    credentials = flow.run_local_server(port=0)
-                    
-                    # Kimlik bilgilerini kaydet
-                    with open(self.credentials_file, 'w') as token:
-                        token.write(credentials.to_json())
-                except Exception as e:
-                    self.logger.error(f"Kimlik doğrulama hatası: {str(e)}")
-                    return False
-        
-        # YouTube API servisini oluştur
-        try:
-            self.youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, 
-                               credentials=credentials)
-            return True
-        except Exception as e:
-            self.logger.error(f"YouTube API servisi oluşturulurken hata: {str(e)}")
+        # MMotoYT klasörünün varlığını kontrol et
+        if not os.path.exists(self.mmoto_yt_dir):
+            self.logger.error(f"MMotoYT klasörü bulunamadı: {self.mmoto_yt_dir}")
             return False
+            
+        # Tokens.json dosyasının varlığını kontrol et
+        tokens_path = os.path.join(self.mmoto_yt_dir, "tokens.json")
+        return os.path.exists(tokens_path)
     
-    def upload_video(self, video_path, title, description, tags=None, category=28, 
+    def upload_video(self, video_path, title, description, tags=None, category="22", 
                     privacy_status="public", is_shorts=True, notify_subscribers=True):
         """
         YouTube'a video yükler
@@ -117,7 +46,7 @@ class YouTubeUploader:
             title (str): Video başlığı
             description (str): Video açıklaması
             tags (list): Video etiketleri
-            category (int): Video kategorisi 
+            category (str): Video kategorisi ID
             privacy_status (str): Gizlilik durumu (public, private, unlisted)
             is_shorts (bool): Shorts olarak yüklenecekse True
             notify_subscribers (bool): Abonelere bildirim gönderilecekse True
@@ -125,161 +54,141 @@ class YouTubeUploader:
         Returns:
             dict: Yükleme sonucu bilgileri
         """
-        if not self.youtube:
-            if not self.authenticate():
-                return {"success": False, "error": "Kimlik doğrulama başarısız"}
-        
         if not os.path.exists(video_path):
             return {"success": False, "error": f"Video dosyası bulunamadı: {video_path}"}
         
-        if not tags:
-            tags = []
-        
-        # İlk etikete dönüştür (YouTube API gereksinimleri)
-        if isinstance(tags, list):
-            tags = [tag.strip() for tag in tags if tag.strip()]
-        
-        # Kategori ID'yi doğrula
-        if isinstance(category, str) and category in YOUTUBE_CATEGORIES:
-            category = YOUTUBE_CATEGORIES[category]
-        
-        # Shorts için hashtag ekle
-        if is_shorts and "#Shorts" not in description:
-            description += "\n\n#Shorts"
-        
         try:
-            # Video meta verilerini hazırla
-            video_metadata = {
-                "snippet": {
-                    "title": title,
-                    "description": description,
-                    "tags": tags,
-                    "categoryId": str(category)
-                },
-                "status": {
-                    "privacyStatus": privacy_status,
-                    "selfDeclaredMadeForKids": False,
-                    "notifySubscribers": notify_subscribers
-                }
+            # MMotoYT videos dizinine video dosyasını kopyala
+            videos_dir = os.path.join(self.mmoto_yt_dir, "videos")
+            
+            # Dizini oluştur (yoksa)
+            if not os.path.exists(videos_dir):
+                os.makedirs(videos_dir)
+                
+            # Dosya adını al
+            filename = os.path.basename(video_path)
+            destination = os.path.join(videos_dir, filename)
+            
+            # Dosyayı kopyala
+            shutil.copy2(video_path, destination)
+            self.logger.info(f"Video dosyası MMotoYT/videos klasörüne kopyalandı: {destination}")
+            
+            # JSON metadata dosyası oluştur
+            if not tags:
+                tags = []
+                
+            # Shorts için hashtag ekle
+            if is_shorts and "#Shorts" not in description:
+                description += "\n\n#Shorts"
+                
+            # Metadata oluştur
+            metadata = {
+                "title": title,
+                "description": description,
+                "tags": tags,
+                "categoryId": str(category),
+                "privacyStatus": privacy_status
             }
             
-            # MediaFileUpload nesnesi oluştur
-            media = MediaFileUpload(video_path, 
-                                  chunksize=1024*1024, 
-                                  resumable=True)
+            # Metadata dosyasını kaydet
+            metadata_path = destination + ".json"
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+                
+            self.logger.info(f"Video metadata dosyası oluşturuldu: {metadata_path}")
             
-            # Yükleme isteği oluştur
-            insert_request = self.youtube.videos().insert(
-                part=",".join(video_metadata.keys()),
-                body=video_metadata,
-                media_body=media
-            )
+            # MMotoYT dizinine geç
+            os.chdir(self.mmoto_yt_dir)
             
-            self.logger.info(f"Video yükleniyor: {title}")
+            # MMotoYT uygulamasını çalıştır
+            self.logger.info("MMotoYT uygulaması başlatılıyor...")
+            print("Video MMotoYT/videos klasörüne kopyalandı. Yüklemeyi tamamlamak için:")
+            print(f"1. {self.mmoto_yt_dir} klasörüne gidin")
+            print("2. run.bat dosyasını çalıştırın")
+            print("\nOtomatik olarak çalıştırmak için 5 saniye içinde herhangi bir tuşa basın, iptal için Ctrl+C...")
             
-            # Yükleme işlemini başlat ve ilerleyişi izle
-            response = None
-            while response is None:
-                status, response = insert_request.next_chunk()
-                if status:
-                    progress = int(status.progress() * 100)
-                    self.logger.info(f"Yükleme ilerlemesi: {progress}%")
+            # Çalışma dizinini kaydet
+            current_dir = os.getcwd()
             
-            # Başarılı yükleme sonrası video bilgilerini al
-            video_id = response['id']
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
-            shorts_url = f"https://youtube.com/shorts/{video_id}"
-            
-            self.logger.info(f"Video başarıyla yüklendi: {video_url}")
-            
-            # Sonucu döndür
-            return {
-                "success": True,
-                "video_id": video_id,
-                "video_url": video_url,
-                "shorts_url": shorts_url if is_shorts else None
-            }
-            
-        except HttpError as e:
-            error_content = json.loads(e.content.decode())
-            error_message = error_content.get('error', {}).get('message', str(e))
-            self.logger.error(f"YouTube API hatası: {error_message}")
-            return {"success": False, "error": error_message}
+            try:
+                # 5 saniye bekleyip kullanıcı girişi olmazsa devam et
+                import msvcrt
+                import sys
+                import select
+                
+                # Windows vs Unix kontrolü
+                if os.name == 'nt':  # Windows
+                    import msvcrt
+                    start_time = time.time()
+                    print("Bekleniyor... ", end="", flush=True)
+                    
+                    # 5 saniye boyunca her 0.1 saniyede kontrol et
+                    while time.time() - start_time < 5:
+                        if msvcrt.kbhit():
+                            msvcrt.getch()  # Tuşa basıldı, devam et
+                            print("\nMMotoYT çalıştırılıyor...")
+                            break
+                        time.sleep(0.1)
+                        print(".", end="", flush=True)
+                    else:
+                        # Süre doldu, kullanıcı araya girmedi
+                        print("\nOtomatik başlatma iptal edildi.")
+                        return {"success": False, "error": "Kullanıcı eylemi gerekiyor. Lütfen manuel olarak run.bat'ı çalıştırın."}
+                else:  # Unix
+                    print("Otomatik çalıştırma yalnızca Windows'ta desteklenir.")
+                    return {"success": False, "error": "Kullanıcı eylemi gerekiyor. Lütfen manuel olarak videoyu yükleyin."}
+                
+                # Node.js uygulamasını çalıştır
+                result = subprocess.run(
+                    ["node", "index.js"],
+                    capture_output=True, 
+                    text=True,
+                    timeout=1800  # 30 dakika timeout
+                )
+                
+                if result.returncode == 0:
+                    # Başarılı çıkış
+                    output = result.stdout
+                    
+                    # Video ID ve URL'yi çıktıdan çıkar
+                    video_id = None
+                    video_url = None
+                    
+                    for line in output.split("\n"):
+                        if "Video ID:" in line:
+                            video_id = line.split("Video ID:")[1].strip()
+                        elif "Video URL:" in line:
+                            video_url = line.split("Video URL:")[1].strip()
+                    
+                    if video_id:
+                        self.logger.info(f"Video başarıyla yüklendi: {video_url}")
+                        
+                        # Sonucu döndür
+                        return {
+                            "success": True,
+                            "video_id": video_id,
+                            "video_url": video_url,
+                            "shorts_url": f"https://youtube.com/shorts/{video_id}" if is_shorts else None
+                        }
+                    else:
+                        # Video ID bulunamadıysa, manuel yükleme talimatlarını göster
+                        message = "Video kopyalandı, ancak ID bulunamadı. Lütfen MMotoYT klasöründe run.bat'i çalıştırın."
+                        self.logger.info(message)
+                        return {"success": True, "message": message, "video_id": None, "video_url": None}
+                else:
+                    # MMotoYT hatası
+                    self.logger.error(f"MMotoYT hatası: {result.stderr}")
+                    return {"success": False, "error": result.stderr}
+                
+            except subprocess.TimeoutExpired:
+                self.logger.error("Video yükleme zaman aşımına uğradı (30 dakika).")
+                return {"success": False, "error": "İşlem zaman aşımına uğradı (30 dakika)"}
+            finally:
+                # Orijinal çalışma dizinine geri dön
+                os.chdir(current_dir)
             
         except Exception as e:
             self.logger.error(f"Video yükleme hatası: {str(e)}")
-            return {"success": False, "error": str(e)}
-    
-    def update_video_metadata(self, video_id, title=None, description=None, tags=None, 
-                             category=None, privacy_status=None):
-        """
-        Yüklenmiş videonun meta verilerini günceller
-        
-        Args:
-            video_id (str): Güncellenecek video ID'si
-            title (str): Yeni başlık
-            description (str): Yeni açıklama
-            tags (list): Yeni etiketler
-            category (int): Yeni kategori
-            privacy_status (str): Yeni gizlilik durumu
-        
-        Returns:
-            dict: Güncelleme sonucu bilgileri
-        """
-        if not self.youtube:
-            if not self.authenticate():
-                return {"success": False, "error": "Kimlik doğrulama başarısız"}
-        
-        try:
-            # Mevcut video meta verilerini al
-            video_response = self.youtube.videos().list(
-                part="snippet,status",
-                id=video_id
-            ).execute()
-            
-            if not video_response.get("items"):
-                return {"success": False, "error": f"Video bulunamadı: {video_id}"}
-            
-            # Mevcut meta verileri al
-            video_snippet = video_response["items"][0]["snippet"]
-            video_status = video_response["items"][0]["status"]
-            
-            # Yeni meta verileri hazırla
-            body = {
-                "id": video_id,
-                "snippet": {
-                    "title": title if title is not None else video_snippet["title"],
-                    "description": description if description is not None else video_snippet["description"],
-                    "tags": tags if tags is not None else video_snippet.get("tags", []),
-                    "categoryId": str(category) if category is not None else video_snippet["categoryId"]
-                },
-                "status": {
-                    "privacyStatus": privacy_status if privacy_status is not None else video_status["privacyStatus"]
-                }
-            }
-            
-            # Güncelleme isteği gönder
-            update_response = self.youtube.videos().update(
-                part="snippet,status",
-                body=body
-            ).execute()
-            
-            self.logger.info(f"Video meta verileri güncellendi: {video_id}")
-            
-            return {
-                "success": True,
-                "video_id": video_id,
-                "video_url": f"https://www.youtube.com/watch?v={video_id}"
-            }
-            
-        except HttpError as e:
-            error_content = json.loads(e.content.decode())
-            error_message = error_content.get('error', {}).get('message', str(e))
-            self.logger.error(f"YouTube API hatası: {error_message}")
-            return {"success": False, "error": error_message}
-            
-        except Exception as e:
-            self.logger.error(f"Meta veri güncelleme hatası: {str(e)}")
             return {"success": False, "error": str(e)}
 
 # Doğrudan çalıştırma testi
@@ -287,9 +196,6 @@ if __name__ == "__main__":
     # Test kodu
     # Örneğin son oluşturulan videoyu YouTube'a yükle
     uploader = YouTubeUploader()
-    
-    from glob import glob
-    import os
     
     # Son oluşturulan video klasörünü bul
     output_dirs = sorted(glob("output/video_*"), key=os.path.getmtime)
@@ -318,15 +224,20 @@ if __name__ == "__main__":
                         title=metadata.get("title", "Otomatik Oluşturulmuş Video"),
                         description=metadata.get("content", ""),
                         tags=metadata.get("keywords", []) + ["Shorts", "kısavideo"],
-                        category="education",
+                        category="22",  # İnsanlar ve Bloglar
                         is_shorts=True
                     )
                     
-                    if result["success"]:
-                        print(f"Video başarıyla yüklendi: {result['video_url']}")
-                        print(f"Shorts URL: {result['shorts_url']}")
+                    if result and result.get("success", False):
+                        if result.get("video_id"):
+                            print(f"Video başarıyla yüklendi: {result.get('video_url', '')}")
+                            if result.get('shorts_url'):
+                                print(f"Shorts URL: {result.get('shorts_url', '')}")
+                        else:
+                            print(f"Bilgi: {result.get('message', 'Video yükleme başarılı fakat ID alınamadı')}")
                     else:
-                        print(f"Video yükleme hatası: {result['error']}")
+                        error_msg = result.get('error', 'Bilinmeyen hata') if result else "Yükleme sonucu alınamadı"
+                        print(f"Video yükleme hatası: {error_msg}")
         else:
             print(f"Metadata dosyası bulunamadı: {metadata_path}")
     else:

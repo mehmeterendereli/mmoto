@@ -64,3 +64,20 @@ Thumbs.db
 bin/bin/ffmpeg.exe
 bin/bin/ffprobe.exe
 bin/bin/ffplay.exe
+
+# Hassas bilgi içeren dosyalar
+client_secret*.json
+tokens.json
+*.env
+MMotoYT/client_secret*.json
+MMotoYT/tokens.json
+MMotoYT/.env
+
+# Node.js dosyaları
+MMotoYT/node_modules/
+MMotoYT\node_modules\
+node_modules/
+
+# Diğer
+*.jpg
+*.png
