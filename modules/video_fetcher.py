@@ -297,25 +297,37 @@ async def evaluate_thumbnail_relevance(thumbnail_path: str, topic: str, content:
         # İçerik metnini string'e dönüştür
         content_text = "\n".join(content)
         
+        # Dil kontrolü - İngilizce mi Türkçe mi?
+        # İngilizce soru işaretleri genellikle İngilizce başlıklarda kullanılır
+        is_english = any(word in topic.lower() for word in ["what", "why", "how", "if", "can", "do", "is", "are", "will", "would"]) or "?" in topic
+        
         # OpenAI API'yi çağır
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {openai_api_key}"
         }
         
+        # İngilizce veya Türkçe prompt
+        if is_english:
+            system_content = "Rate how relevant this image is to the given topic and content on a scale of 0-10. Only provide a score and a short explanation."
+            user_text = f"Topic: {topic}\n\nContent: {content_text}\n\nRate how relevant this image is to the topic and content on a scale of 0-10. Only return the score and a brief explanation. Format: [SCORE]: [EXPLANATION]"
+        else:
+            system_content = "Bu görselin verilen konu ve içerikle ne kadar alakalı olduğunu 0-10 arasında değerlendir. Sadece puan ve kısa bir açıklama ver."
+            user_text = f"Konu: {topic}\n\nİçerik: {content_text}\n\nBu görselin konuyla ve içerikle alakasını 0-10 arasında puanla. Sadece puanı ve kısa açıklamayı döndür. Format: [PUAN]: [AÇIKLAMA]"
+        
         payload = {
             "model": "gpt-4o",
             "messages": [
                 {
                     "role": "system", 
-                    "content": "Bu görselin verilen konu ve içerikle ne kadar alakalı olduğunu 0-10 arasında değerlendir. Sadece puan ve kısa bir açıklama ver."
+                    "content": system_content
                 },
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Konu: {topic}\n\nİçerik: {content_text}\n\nBu görselin konuyla ve içerikle alakasını 0-10 arasında puanla. Sadece puanı ve kısa açıklamayı döndür. Format: [PUAN]: [AÇIKLAMA]"
+                            "text": user_text
                         },
                         {
                             "type": "image_url",
@@ -337,13 +349,30 @@ async def evaluate_thumbnail_relevance(thumbnail_path: str, topic: str, content:
                     
                     # Yanıttan puanı çıkar
                     try:
-                        # "[PUAN]: [AÇIKLAMA]" formatında yanıt bekliyoruz
-                        score_text = response_text.split(":")[0].strip()
+                        # "[PUAN]: [AÇIKLAMA]" veya "[SCORE]: [EXPLANATION]" formatında yanıt bekliyoruz
+                        # Önce iki nokta üstüne göre ayır
+                        if ":" in response_text:
+                            score_text = response_text.split(":")[0].strip()
+                        # Eğer iki nokta üstü yoksa, ilk sayıyı bulmaya çalış
+                        else:
+                            import re
+                            score_match = re.search(r'\b(\d+(\.\d+)?)\b', response_text)
+                            if score_match:
+                                score_text = score_match.group(1)
+                            else:
+                                raise ValueError("Score not found in response")
+                        
+                        # Puanı dönüştür
                         score = float(score_text)
+                        
+                        # Puan 0-10 arasında olmalı
+                        score = max(0.0, min(10.0, score))
+                        
+                        print(f"Thumbnail puanı: {score}/10 - {thumbnail_path}")
                         return thumbnail_path, score
-                    except:
+                    except Exception as parse_error:
                         # Puan çıkarılamazsa varsayılan değer
-                        print(f"Puan çıkarılamadı: {response_text}")
+                        print(f"Puan çıkarılamadı: {response_text} - Hata: {str(parse_error)}")
                         return thumbnail_path, 0.0
                 else:
                     error_text = await response.text()

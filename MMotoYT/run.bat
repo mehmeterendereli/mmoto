@@ -1,4 +1,4 @@
 @echo off
-echo YouTube Video Uploader Başlatılıyor...
+echo Starting YouTube Video Uploader...
 node index.js
-pause 
+exit 

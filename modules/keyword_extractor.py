@@ -4,95 +4,89 @@
 import os
 import openai
 from typing import List
+import re
 
-def extract_keywords(sentences: List[str], topic: str = "") -> List[str]:
+def extract_keywords(sentences: List[str], topic: str) -> List[str]:
     """
-    Verilen metinden video araması için anahtar kelimeleri çıkarır
+    Verilen cümlelerden anahtar kelimeleri çıkarır
     
     Args:
-        sentences (List[str]): İçerik metni (cümleler listesi)
-        topic (str, optional): Ana konu. Varsayılan değer boş string.
+        sentences (List[str]): Anahtar kelimelerin çıkarılacağı cümleler
+        topic (str): Ana konu
     
     Returns:
-        List[str]: Video araması için anahtar kelimeler
+        List[str]: Anahtar kelimeler listesi
     """
     try:
-        # Cümleleri tek bir metne birleştir
-        full_text = " ".join(sentences)
+        # Topic'ten doğrudan anahtar kelime çıkar
+        topic_words = topic.split()
         
-        # OpenAI API anahtarını kontrol et
-        import json
-        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+        # İngilizce veya Türkçe soru formatını temizle
+        clean_topic = topic.replace("?", "").replace("!", "").replace(".", "")
         
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                api_key = config.get("openai_api_key", "")
+        # İngilizce mi kontrol et
+        is_english = any(word in topic.lower() for word in ["what", "why", "how", "if", "can", "do", "is", "are", "will", "would"]) or "?" in topic
+        
+        # İngilizce soru kelimelerini ve yaygın bağlaçları kaldır
+        if is_english:
+            stop_words = ["what", "why", "how", "is", "are", "if", "would", "will", "can", "do", "does", "did", "the", "a", "an", "in", "on", "at", "to", "from", "with", "about", "for", "of", "by", "so", "such", "this", "these", "those", "that"]
         else:
-            api_key = ""
-            
-        if not api_key or len(api_key) < 10:
-            print("OpenAI API anahtarı bulunamadı, basit anahtar kelime çıkarma kullanılacak")
-            # Basit kelime çıkarma kullan
-            import re
-            words = re.findall(r'\b\w{5,}\b', full_text.lower())
-            unique_words = list(set(words))
-            # En sık geçen 5 kelimeyi al
-            word_count = {}
+            # Türkçe soru kelimelerini ve yaygın bağlaçları kaldır
+            stop_words = ["neden", "nasıl", "niçin", "ne", "nerede", "mi", "mı", "mu", "mü", "acaba", "hangi", "eğer", "ya", "ve", "veya", "ile", "için", "gibi", "da", "de", "ki", "bu", "şu", "o"]
+        
+        # Konu kelimelerini temizle ve önemli anahtar kelimeleri çıkar
+        important_words = []
+        for word in clean_topic.split():
+            word = word.lower().strip()
+            if word and len(word) > 2 and word not in stop_words:
+                # İlk harfi büyüt
+                important_words.append(word.capitalize())
+        
+        # İçerikten de bazı önemli kelimeleri çıkar
+        content_text = " ".join(sentences)
+        
+        # Aynı kelimelerden kaçınmak için mevcut kelimeleri kontrol et
+        existing_words = set(w.lower() for w in important_words)
+        
+        # İçerikten önemli kelimeleri bul
+        for sentence in sentences:
+            words = sentence.split()
             for word in words:
-                word_count[word] = word_count.get(word, 0) + 1
-            
-            sorted_words = sorted(word_count.items(), key=lambda x: x[1], reverse=True)
-            keywords = [word for word, count in sorted_words[:5]]
+                # Noktalama işaretlerini kaldır
+                word = re.sub(r'[^\w\s]', '', word).strip()
+                
+                # Kelimeyi değerlendir
+                if word and len(word) > 3 and word.lower() not in existing_words and word.lower() not in stop_words:
+                    # Büyük harfle başlayan veya tamamen büyük harfle yazılmış kelimeleri muhtemelen önemlidir
+                    if word[0].isupper() or word.isupper():
+                        important_words.append(word)
+                        existing_words.add(word.lower())
+        
+        # Ana konuyu ilk anahtar kelime olarak ekle
+        primary_keyword = None
+        
+        # Konudan ana anahtar kelimeyi bul
+        if len(important_words) > 0:
+            primary_keyword = important_words[0]
+        elif len(clean_topic.split()) > 0:
+            primary_keyword = clean_topic.split()[0].capitalize()
         else:
-            # GPT-4o kullanarak anahtar kelimeleri çıkart
-            client = openai.OpenAI(api_key=api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "Sen bir metin analisti ve anahtar kelime çıkarıcısısın."},
-                    {"role": "user", "content": f"""Aşağıdaki metinden Pexels API'de video arama yapmak için 3 adet anahtar kelime çıkar. 
-                    
-Önemli kurallar:
-1. Anahtar kelimeler basit ve net olmalı (örneğin: ocean, fish, underwater)
-2. Bileşik terimler KULLANMA, sadece tek kelimeler kullan
-3. Çok genel terimlerden kaçın (nature, landscape gibi)
-4. Metindeki görsel öğelere odaklan
-5. Anahtar kelimeler İngilizce olmalı
-6. Her anahtar kelime tek bir satırda olmalı
-
-Metin: {full_text}
-Konu: {topic}"""}
-                ]
-            )
-            
-            # Yanıtı satırlara böl
-            text = response.choices[0].message.content
-            keywords = [line.strip() for line in text.split('\n') if line.strip()]
-            
-            # En fazla 3 anahtar kelime al (API limitini azaltmak için)
-            keywords = keywords[:3]
+            primary_keyword = "Video"
         
-        # Anahtar kelimeleri dosyaya kaydet
-        project_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_folder = os.path.join(project_folder, "output")
+        # Anahtar kelimeleri düzenle ve ana kelimeyi başa koy
+        final_keywords = [primary_keyword]
+        for word in important_words:
+            if word != primary_keyword and word not in final_keywords:
+                final_keywords.append(word)
         
-        # En son oluşturulan klasörü bul
-        folders = [f for f in os.listdir(output_folder) if os.path.isdir(os.path.join(output_folder, f))]
-        if folders:
-            latest_folder = max(folders, key=lambda x: os.path.getctime(os.path.join(output_folder, x)))
-            project_folder = os.path.join(output_folder, latest_folder)
-            
-            with open(os.path.join(project_folder, "pexels_keywords.txt"), "w", encoding="utf-8") as f:
-                f.write("\n".join(keywords))
-            
-            print(f"Anahtar kelimeler: {', '.join(keywords)}")
+        # Toplam anahtar kelime sayısını sınırla
+        final_keywords = final_keywords[:5]  # En fazla 5 anahtar kelime
         
-        return keywords
-    
+        # Anahtar kelimeleri yazdır
+        print("Keywords:", ", ".join(final_keywords))
+        
+        return final_keywords
+        
     except Exception as e:
         print(f"Anahtar kelime çıkarma hatası: {str(e)}")
-        # Hata durumunda varsayılan anahtar kelimeler
-        keywords = ["landscape", "nature", "education"]
-        print(f"Varsayılan anahtar kelimeler kullanılıyor: {', '.join(keywords)}")
-        return keywords
+        return [topic.split()[0] if topic and len(topic.split()) > 0 else "Video"]

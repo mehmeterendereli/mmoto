@@ -10,15 +10,15 @@ from typing import Dict, Any
 
 def generate_content(topic: str) -> Dict[str, Any]:
     """
-    Verilen konu için bilgi içerikli metin üretir
+    Generates informative text content for a given topic
     
     Args:
-        topic (str): İçerik konusu
+        topic (str): Content topic
     
     Returns:
-        Dict[str, Any]: Üretilen içerik bilgileri
+        Dict[str, Any]: Generated content information
     """
-    # Konfigürasyon dosyasından OpenAI API anahtarını al
+    # Get OpenAI API key from configuration file
     config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
     api_key = ""
     
@@ -31,81 +31,81 @@ def generate_content(topic: str) -> Dict[str, Any]:
             pass
     
     if not api_key:
-        print("Uyarı: OpenAI API anahtarı bulunamadı!")
-        # Dummy içerik döndür
+        print("Warning: OpenAI API key not found!")
+        # Return dummy content
         return {
             "topic": topic,
             "response": [
-                "Bu bir örnek içeriktir.",
-                f"{topic} hakkında bilgi bulunamadı.",
-                "Lütfen API anahtarınızı kontrol edin."
+                "This is a sample content.",
+                f"No information found about {topic}.",
+                "Please check your API key."
             ]
         }
     
     try:
-        # OpenAI istemcisini başlat
+        # Initialize OpenAI client
         client = OpenAI(api_key=api_key)
         
-        # GPT-4o sistemi kullanarak içerik üret
+        # Generate content using GPT-4o
         prompt = f"""
-        Bana {topic} hakkında kısa, bilgilendirici bir metin yaz. 
-        Bu metin bir video için TTS ile seslendirilecek.
+        Write a short, informative text about {topic}.
+        This text will be narrated by TTS for a video.
         
-        Önemli Kurallar:
-        1. Metin konuya direkt olarak girmeli, "merhaba, bugün... konusunu anlatacağım" gibi gereksiz giriş cümleleri olmamalı
-        2. Her cümle ayrı bir paragraf olmalı, listelemeler ve numaralandırmalar olmamalı
-        3. Toplam 7 cümle olmalı ve tüm metin seslendirildiğinde yaklaşık 45 saniye sürmelidir (ASLA 50 saniyeyi geçmemeli)
-        4. Her cümle anlamlı ve öğretici olmalı
-        5. Metin hedef kitlesi genel izleyici, yani teknik olmayan bir dil kullan
-        6. Her cümle 12-20 kelime arasında olmalı ve Türkçe olmalı
-        7. Metin sadece düz cümlelerden oluşmalı, sadece 7 cümlelik bir metin olmalı
-        8. Her cümle 2-4 saniye arası bir nefes alma süresi içermeli (doğallık için)
+        Important Rules:
+        1. The text should get straight to the point, no unnecessary introductions like "hello, today I'll talk about..."
+        2. Each sentence should be a separate paragraph, no lists or numbered items
+        3. Total of 7 sentences and the entire text should take approximately 45 seconds when narrated (NEVER exceed 50 seconds)
+        4. Each sentence should be meaningful and educational
+        5. Target audience is general viewers, so use non-technical language
+        6. Each sentence should be between 12-20 words in length and in English
+        7. The text should consist of only plain sentences, just 7 sentences in total
+        8. Each sentence should include a 2-4 second breathing pause (for naturalness)
         
-        Lütfen tamamen yukarıdaki kurallara uygun, toplam 7 cümlelik ve TTS okunduğunda toplam 35-45 saniye arası sürecek bir metin oluştur.
-        Her cümleyi ayrı bir paragraf olarak ver.
+        Please create a text that fully complies with the above rules, with a total of 7 sentences that will take 35-45 seconds when read by TTS.
+        Provide each sentence as a separate paragraph.
         """
         
-        # İstek gönder
+        # Send request
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Sen kısa, bilgilendirici içerik üreten bir asistansın."},
+                {"role": "system", "content": "You are an assistant that creates short, informative content."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
             max_tokens=1000
         )
         
-        # Cevabı al ve işle
+        # Get and process the response
         content = response.choices[0].message.content
         
-        # Cevabı cümlelere ayır - her bir paragraf bir cümle olacak
+        # Split the response into sentences - each paragraph is a sentence
         sentences = []
         for paragraph in content.strip().split('\n'):
             paragraph = paragraph.strip()
-            if paragraph:  # Boş paragrafları atla
-                # Madde işaretleri ve numaralar varsa kaldır
+            if paragraph:  # Skip empty paragraphs
+                # Remove bullet points and numbers if present
                 cleaned = re.sub(r'^\d+\.\s*|\*\s*|\-\s*', '', paragraph)
                 sentences.append(cleaned)
         
-        # Cümle sayısını kontrol et ve gerekirse düzenle
+        # Check sentence count and adjust if needed
         if len(sentences) > 7:
-            sentences = sentences[:7]  # Maksimum 7 cümle
+            sentences = sentences[:7]  # Maximum 7 sentences
         
-        # Sonuçları döndür
+        # Return results
         return {
             "topic": topic,
             "response": sentences
         }
     
     except Exception as e:
-        print(f"İçerik üretme hatası: {str(e)}")
-        # Hata durumunda dummy içerik döndür
+        print(f"Content generation error: {str(e)}")
+        # Return dummy content in case of error
         return {
             "topic": topic,
             "response": [
-                f"{topic} hakkında içerik oluşturulurken bir hata oluştu.",
-                "API ile iletişimde sorun yaşandı.",
-                "Lütfen daha sonra tekrar deneyiniz."
+                f"An error occurred while creating content about {topic}.",
+                "There was a problem communicating with the API.",
+                "Please try again later."
             ]
         } 
