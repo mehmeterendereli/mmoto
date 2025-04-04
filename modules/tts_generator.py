@@ -134,7 +134,7 @@ def save_word_timings(transcript: Dict[str, Any], output_path: str) -> bool:
         except:
             return False
 
-def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder: str) -> List[str]:
+def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder: str, language: str = "tr") -> List[str]:
     """
     Verilen metinleri TTS ile seslendirme dosyalarına dönüştürür
     
@@ -143,6 +143,7 @@ def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder:
         api_key (str): OpenAI API anahtarı
         voice (str): Kullanılacak ses (örn. "onyx", "alloy")
         project_folder (str): Proje klasörünün yolu
+        language (str): Seslendirme dili (default: "tr" için Türkçe)
     
     Returns:
         List[str]: Oluşturulan ses dosyalarının yolları
@@ -186,16 +187,34 @@ def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder:
             if not clean_sentence:
                 continue
             
-            # Sayıları yazıya çevir (1881 -> bin sekiz yüz seksen bir)
-            clean_sentence = convert_numbers_to_text(clean_sentence)
-            print(f"TTS için hazırlanan metin: {clean_sentence}")
+            # Sayıları yazıya çevir (1881 -> bin sekiz yüz seksen bir) - Türkçe içinse
+            if language == "tr":
+                clean_sentence = convert_numbers_to_text(clean_sentence)
             
-            # TTS oluştur - hızı 1.2 olarak ayarla
+            print(f"TTS için hazırlanan metin ({language}): {clean_sentence}")
+            
+            # TTS oluştur - hızı dile göre ayarla
+            # Varsayılan hız 1.0, akıcı konuşma için 1.2
+            voice_speed = 1.2
+            
+            # Dile özel ayarlar
+            voice_options = {
+                "tr": {"voice": voice, "speed": 1.2},
+                "en": {"voice": voice, "speed": 1.0},
+                "es": {"voice": voice, "speed": 1.1},
+                "fr": {"voice": voice, "speed": 1.1},
+                "de": {"voice": voice, "speed": 1.1},
+            }
+            
+            # Dile göre ayarları al veya varsayılan kullan
+            voice_config = voice_options.get(language, {"voice": voice, "speed": 1.0})
+            
+            # TTS oluştur
             response = client.audio.speech.create(
                 model="tts-1",
-                voice=voice,
+                voice=voice_config["voice"],
                 input=clean_sentence,
-                speed=1.2  # Daha hızlı konuşma
+                speed=voice_config["speed"]
             )
             
             # Tempfile ile geçici dosya oluştur
@@ -231,7 +250,7 @@ def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder:
                 
                 # Ses dosyasını listeye ekle
                 audio_files.append(audio_path)
-                print(f"Ses dosyası oluşturuldu: {audio_path}")
+                print(f"Ses dosyası oluşturuldu ({language}): {audio_path}")
                 
                 # Artık her ses dosyası için ayrı ayrı Whisper analizi yapmıyoruz
                 # Bunun yerine tüm ses dosyalarını birleştirip tek bir analiz yapacağız

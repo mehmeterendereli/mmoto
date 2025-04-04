@@ -5,7 +5,6 @@ import json
 import os
 import sys
 import queue
-import webbrowser
 from datetime import datetime
 from PIL import Image, ImageTk
 
@@ -14,64 +13,13 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from main import process_single_video
 from modules.topic_generator import generate_topic, generate_english_topic
 
-# Uygulama renkleri
-APP_COLOR_PRIMARY = "#1f538d"
-APP_COLOR_SECONDARY = "#14375e"
-APP_COLOR_LIGHT = "#dedede"
-
-class HelpPopup(ctk.CTkToplevel):
-    """Yardım popup penceresi"""
-    def __init__(self, parent, title, message, link=None, link_text=None):
-        super().__init__(parent)
-        self.title(title)
-        self.geometry("600x400")
-        self.resizable(False, False)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-        
-        # İçerik
-        header = ctk.CTkLabel(self, text=title, font=("Arial", 16, "bold"))
-        header.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
-        
-        text_frame = ctk.CTkFrame(self)
-        text_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        text_frame.grid_columnconfigure(0, weight=1)
-        text_frame.grid_rowconfigure(0, weight=1)
-        
-        text = ctk.CTkTextbox(text_frame)
-        text.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        text.insert("1.0", message)
-        text.configure(state="disabled")
-        
-        button_frame = ctk.CTkFrame(self, fg_color="transparent")
-        button_frame.grid(row=2, column=0, padx=20, pady=20, sticky="ew")
-        
-        # Link butonu
-        if link and link_text:
-            link_button = ctk.CTkButton(
-                button_frame, 
-                text=link_text, 
-                command=lambda: webbrowser.open(link)
-            )
-            link_button.pack(side="left", padx=10)
-        
-        # Kapat butonu
-        close_button = ctk.CTkButton(
-            button_frame, 
-            text="Kapat", 
-            command=self.destroy
-        )
-        close_button.pack(side="right", padx=10)
-
 class MMotoApp(ctk.CTk):
-    """Ana uygulama sınıfı"""
     def __init__(self):
         super().__init__()
         
         # Ana pencere ayarları
         self.title("MMoto Video Oluşturucu")
-        self.geometry("1000x700")
-        self.minsize(800, 600)
+        self.geometry("800x600")
         
         # Tema ayarı
         ctk.set_appearance_mode("dark")
@@ -84,119 +32,26 @@ class MMotoApp(ctk.CTk):
         self.max_videos_var = ctk.StringVar(value="5")
         self.language_var = ctk.StringVar(value="tr")
         self.is_running = False
-        self.current_page = "home"
-        
-        # API anahtarları değişkenleri
-        self.openai_api_var = ctk.StringVar()
-        self.pexels_api_var = ctk.StringVar()
-        self.youtube_api_var = ctk.StringVar()
-        self.pixabay_api_var = ctk.StringVar()
         
         # Log kuyruğu
         self.log_queue = queue.Queue()
         
-        # Ana düzen
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-        
-        # Menü ve içerik alanlarını oluştur
-        self.create_sidebar()
-        self.create_content_area()
-        
-        # Home sayfasını göster (başlangıç)
-        self.show_home_page()
+        # Arayüzü oluştur
+        self.create_ui()
         
         # Log işleme zamanlayıcısı
         self.after(100, self.process_logs)
         
         # Ayarları yükle
         self.load_config()
-        
-    def create_sidebar(self):
-        """Sol taraftaki menü çubuğunu oluşturur"""
-        # Menü çerçevesi
-        self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
-        self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(4, weight=1)
-        
-        # Logo / Başlık
-        logo_label = ctk.CTkLabel(
-            self.sidebar_frame, 
-            text="MMoto", 
-            font=ctk.CTkFont(size=20, weight="bold")
-        )
-        logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
-        
-        # Menü butonları
-        self.home_button = ctk.CTkButton(
-            self.sidebar_frame, 
-            text="Ana Sayfa",
-            command=self.show_home_page
-        )
-        self.home_button.grid(row=1, column=0, padx=20, pady=10)
-        
-        self.api_button = ctk.CTkButton(
-            self.sidebar_frame, 
-            text="API Anahtarları",
-            command=self.show_api_page
-        )
-        self.api_button.grid(row=2, column=0, padx=20, pady=10)
-        
-        # Görünüm seçici (light/dark mode)
-        self.appearance_mode_label = ctk.CTkLabel(self.sidebar_frame, text="Görünüm:", anchor="w")
-        self.appearance_mode_label.grid(row=5, column=0, padx=20, pady=(10, 0))
-        self.appearance_mode_menu = ctk.CTkOptionMenu(
-            self.sidebar_frame, 
-            values=["Light", "Dark", "System"],
-            command=self.change_appearance_mode
-        )
-        self.appearance_mode_menu.grid(row=6, column=0, padx=20, pady=(10, 20))
-        self.appearance_mode_menu.set("Dark")
     
-    def create_content_area(self):
-        """İçerik alanını oluşturur"""
-        # Ana içerik alanı
-        self.content_frame = ctk.CTkFrame(self)
-        self.content_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
-        
-        # Sayfalar için frame'ler
-        self.home_frame = ctk.CTkFrame(self.content_frame)
-        self.api_frame = ctk.CTkFrame(self.content_frame)
-        
-        # Home Frame (Ana Sayfa)
-        self.setup_home_frame()
-        
-        # API Keys Frame
-        self.setup_api_frame()
-    
-    def change_appearance_mode(self, new_appearance_mode):
-        """Görünüm modunu değiştirir"""
-        ctk.set_appearance_mode(new_appearance_mode)
-        
-    def show_home_page(self):
-        """Ana sayfayı gösterir"""
-        self.current_page = "home"
-        self.home_frame.pack(fill="both", expand=True)
-        self.api_frame.pack_forget()
-        self.home_button.configure(fg_color=APP_COLOR_PRIMARY)
-        self.api_button.configure(fg_color="transparent")
-        
-    def show_api_page(self):
-        """API Keys sayfasını gösterir"""
-        self.current_page = "api"
-        self.api_frame.pack(fill="both", expand=True)
-        self.home_frame.pack_forget()
-        self.api_button.configure(fg_color=APP_COLOR_PRIMARY)
-        self.home_button.configure(fg_color="transparent")
-        
-    def setup_home_frame(self):
-        """Ana sayfa içeriğini oluşturur"""
+    def create_ui(self):
         # Ana düzen
-        self.home_frame.grid_columnconfigure(0, weight=1)
-        self.home_frame.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
         
         # Üst panel - Konu girişi
-        top_frame = ctk.CTkFrame(self.home_frame)
+        top_frame = ctk.CTkFrame(self)
         top_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
         top_frame.grid_columnconfigure(0, weight=0)
         top_frame.grid_columnconfigure(1, weight=1)
@@ -211,7 +66,7 @@ class MMotoApp(ctk.CTk):
         topic_btn.grid(row=0, column=2, padx=5, pady=10)
         
         # Ana içerik - Log alanı
-        content_frame = ctk.CTkFrame(self.home_frame)
+        content_frame = ctk.CTkFrame(self)
         content_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
         content_frame.grid_columnconfigure(0, weight=1)
         content_frame.grid_rowconfigure(0, weight=1)
@@ -224,7 +79,7 @@ class MMotoApp(ctk.CTk):
         self.log_text.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
         
         # Ayarlar bölümü
-        settings_frame = ctk.CTkFrame(self.home_frame)
+        settings_frame = ctk.CTkFrame(self)
         settings_frame.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
         settings_frame.grid_columnconfigure(1, weight=1)
         
@@ -266,7 +121,7 @@ class MMotoApp(ctk.CTk):
         status_value.grid(row=2, column=1, padx=5, pady=5, sticky="w")
         
         # Alt panel - Kontrol butonları
-        button_frame = ctk.CTkFrame(self.home_frame)
+        button_frame = ctk.CTkFrame(self)
         button_frame.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
         
         # Başlat butonu
@@ -280,239 +135,6 @@ class MMotoApp(ctk.CTk):
         # YouTube ayarlarını kontrol et butonu
         yt_check_btn = ctk.CTkButton(button_frame, text="YouTube Ayarlarını Kontrol Et", command=self.check_youtube_settings)
         yt_check_btn.pack(side="right", padx=5, pady=5)
-
-    def setup_api_frame(self):
-        """API Keys sayfasını oluşturur"""
-        # Ana düzen
-        self.api_frame.grid_columnconfigure(0, weight=1)
-        self.api_frame.grid_rowconfigure(5, weight=1)
-        
-        # Başlık
-        title_label = ctk.CTkLabel(
-            self.api_frame, 
-            text="API Anahtarları", 
-            font=ctk.CTkFont(size=18, weight="bold")
-        )
-        title_label.grid(row=0, column=0, padx=20, pady=(20, 30), sticky="w")
-        
-        # API Keys Ana Çerçeve
-        api_keys_frame = ctk.CTkFrame(self.api_frame)
-        api_keys_frame.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
-        api_keys_frame.grid_columnconfigure(1, weight=1)
-        
-        # 1. OpenAI API Key
-        openai_label = ctk.CTkLabel(api_keys_frame, text="OpenAI API Key:")
-        openai_label.grid(row=0, column=0, padx=10, pady=15, sticky="w")
-        
-        openai_entry = ctk.CTkEntry(api_keys_frame, textvariable=self.openai_api_var, width=400, show="*")
-        openai_entry.grid(row=0, column=1, padx=10, pady=15, sticky="ew")
-        
-        openai_help_btn = ctk.CTkButton(
-            api_keys_frame, 
-            text="?", 
-            width=30, 
-            command=lambda: self.show_api_help("openai")
-        )
-        openai_help_btn.grid(row=0, column=2, padx=10, pady=15)
-        
-        # 2. Pexels API Key
-        pexels_label = ctk.CTkLabel(api_keys_frame, text="Pexels API Key:")
-        pexels_label.grid(row=1, column=0, padx=10, pady=15, sticky="w")
-        
-        pexels_entry = ctk.CTkEntry(api_keys_frame, textvariable=self.pexels_api_var, width=400, show="*")
-        pexels_entry.grid(row=1, column=1, padx=10, pady=15, sticky="ew")
-        
-        pexels_help_btn = ctk.CTkButton(
-            api_keys_frame, 
-            text="?", 
-            width=30, 
-            command=lambda: self.show_api_help("pexels")
-        )
-        pexels_help_btn.grid(row=1, column=2, padx=10, pady=15)
-        
-        # 3. YouTube API Key
-        youtube_label = ctk.CTkLabel(api_keys_frame, text="YouTube API Key:")
-        youtube_label.grid(row=2, column=0, padx=10, pady=15, sticky="w")
-        
-        youtube_entry = ctk.CTkEntry(api_keys_frame, textvariable=self.youtube_api_var, width=400, show="*")
-        youtube_entry.grid(row=2, column=1, padx=10, pady=15, sticky="ew")
-        
-        youtube_help_btn = ctk.CTkButton(
-            api_keys_frame, 
-            text="?", 
-            width=30, 
-            command=lambda: self.show_api_help("youtube")
-        )
-        youtube_help_btn.grid(row=2, column=2, padx=10, pady=15)
-        
-        # 4. Pixabay API Key
-        pixabay_label = ctk.CTkLabel(api_keys_frame, text="Pixabay API Key:")
-        pixabay_label.grid(row=3, column=0, padx=10, pady=15, sticky="w")
-        
-        pixabay_entry = ctk.CTkEntry(api_keys_frame, textvariable=self.pixabay_api_var, width=400, show="*")
-        pixabay_entry.grid(row=3, column=1, padx=10, pady=15, sticky="ew")
-        
-        pixabay_help_btn = ctk.CTkButton(
-            api_keys_frame, 
-            text="?", 
-            width=30, 
-            command=lambda: self.show_api_help("pixabay")
-        )
-        pixabay_help_btn.grid(row=3, column=2, padx=10, pady=15)
-        
-        # Göster/Gizle Checkbox
-        self.show_keys_var = ctk.BooleanVar(value=False)
-        show_keys_check = ctk.CTkCheckBox(
-            self.api_frame, 
-            text="API Anahtarlarını Göster", 
-            variable=self.show_keys_var,
-            command=self.toggle_key_visibility
-        )
-        show_keys_check.grid(row=2, column=0, padx=20, pady=10, sticky="w")
-        
-        # Kaydetme Butonu
-        save_btn = ctk.CTkButton(
-            self.api_frame, 
-            text="Ayarları Kaydet", 
-            command=self.save_api_settings
-        )
-        save_btn.grid(row=3, column=0, padx=20, pady=20)
-        
-        # Durum Label'ı
-        self.api_status_var = ctk.StringVar(value="")
-        api_status_label = ctk.CTkLabel(
-            self.api_frame, 
-            textvariable=self.api_status_var,
-            text_color="#4CAF50"
-        )
-        api_status_label.grid(row=4, column=0, padx=20, pady=5, sticky="w")
-        
-    def toggle_key_visibility(self):
-        """API anahtarlarının görünürlüğünü değiştirir"""
-        show_keys = self.show_keys_var.get()
-        # API anahtarları girişlerini bul
-        for widget in self.api_frame.winfo_children():
-            if isinstance(widget, ctk.CTkFrame):
-                for entry in widget.winfo_children():
-                    if isinstance(entry, ctk.CTkEntry):
-                        entry.configure(show="" if show_keys else "*")
-    
-    def show_api_help(self, api_type):
-        """API yardım popupını gösterir"""
-        if api_type == "openai":
-            HelpPopup(
-                self,
-                "OpenAI API Key Nasıl Alınır",
-                "OpenAI API Key almak için şu adımları izleyin:\n\n"
-                "1. OpenAI hesabınıza giriş yapın (yoksa kaydolun)\n"
-                "2. Sağ üst köşedeki profil menüsüne tıklayın\n"
-                "3. 'View API Keys' seçeneğini seçin\n"
-                "4. 'Create new secret key' butonuna tıklayın\n"
-                "5. Oluşturulan anahtarı kopyalayın ve bu alana yapıştırın\n\n"
-                "NOT: API anahtarınız 'sk-...' ile başlar ve yaklaşık 50 karakter uzunluğundadır.",
-                "https://platform.openai.com/api-keys",
-                "OpenAI API Keys Sayfasına Git"
-            )
-        elif api_type == "pexels":
-            HelpPopup(
-                self,
-                "Pexels API Key Nasıl Alınır",
-                "Pexels API Key almak için şu adımları izleyin:\n\n"
-                "1. Pexels hesabınıza giriş yapın (yoksa kaydolun)\n"
-                "2. https://www.pexels.com/api/new/ adresine gidin\n"
-                "3. 'Your API Key' bölümünden anahtarınızı kopyalayın\n"
-                "4. Kopyaladığınız anahtarı bu alana yapıştırın\n\n"
-                "NOT: Pexels API anahtarı yaklaşık 30-40 karakter uzunluğundadır.",
-                "https://www.pexels.com/api/",
-                "Pexels API Sayfasına Git"
-            )
-        elif api_type == "youtube":
-            HelpPopup(
-                self,
-                "YouTube API Key Nasıl Alınır",
-                "YouTube API Key almak için şu adımları izleyin:\n\n"
-                "1. Google Cloud Console'a giriş yapın\n"
-                "2. Bir proje oluşturun (yoksa)\n"
-                "3. API Kütüphanesi'nden YouTube Data API v3'ü etkinleştirin\n"
-                "4. Kimlik Bilgileri menüsünden API anahtarı oluşturun\n"
-                "5. Oluşturulan anahtarı bu alana yapıştırın\n\n"
-                "NOT: YouTube API anahtarı 'AIzaSy...' ile başlar.",
-                "https://console.cloud.google.com/apis/dashboard",
-                "Google Cloud Console'a Git"
-            )
-        elif api_type == "pixabay":
-            HelpPopup(
-                self,
-                "Pixabay API Key Nasıl Alınır",
-                "Pixabay API Key almak için şu adımları izleyin:\n\n"
-                "1. Pixabay hesabınıza giriş yapın (yoksa kaydolun)\n"
-                "2. https://pixabay.com/api/docs/ adresine gidin\n"
-                "3. Sayfanın alt tarafındaki 'API Key Request' bölümünü doldurun\n"
-                "4. Onay e-postasıyla aldığınız API anahtarını bu alana yapıştırın\n\n"
-                "NOT: Pixabay API anahtarı 15-20 karakter uzunluğunda rakam ve harflerden oluşur.",
-                "https://pixabay.com/service/about/api/",
-                "Pixabay API Sayfasına Git"
-            )
-    
-    def save_api_settings(self):
-        """API anahtarlarını config.json dosyasına kaydeder"""
-        try:
-            # Mevcut config dosyasını yükle
-            config = self.load_config()
-            
-            # API anahtarlarını güncelle
-            config["openai_api_key"] = self.openai_api_var.get()
-            config["pexels_api_key"] = self.pexels_api_var.get()
-            config["youtube_api_key"] = self.youtube_api_var.get()
-            config["pixabay_api_key"] = self.pixabay_api_var.get()
-            
-            # Config dosyasına kaydet
-            with open("config.json", "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-            
-            # Başarılı mesajını göster
-            self.api_status_var.set("API anahtarları başarıyla kaydedildi!")
-            self.after(3000, lambda: self.api_status_var.set(""))
-            
-        except Exception as e:
-            # Hata mesajını göster
-            self.api_status_var.set(f"Hata: {str(e)}")
-            self.after(3000, lambda: self.api_status_var.set(""))
-
-    def process_logs(self):
-        """Log kuyruğundan mesajları işler"""
-        try:
-            while True:
-                message = self.log_queue.get_nowait()
-                self.log_text.insert("end", f"[{self.get_time()}] {message}\n")
-                self.log_text.see("end")  # Otomatik kaydır
-                self.log_queue.task_done()
-        except queue.Empty:
-            pass
-        
-        # İşlemi tekrarla
-        self.after(100, self.process_logs)
-    
-    def get_time(self):
-        """Güncel zamanı formatlar"""
-        return datetime.now().strftime("%H:%M:%S")
-
-    def load_config(self):
-        """Konfigürasyon dosyasını yükler ve değişkenleri doldurur"""
-        try:
-            with open('config.json', 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                
-                # API anahtarlarını değişkenlere ata
-                self.openai_api_var.set(config.get("openai_api_key", ""))
-                self.pexels_api_var.set(config.get("pexels_api_key", ""))
-                self.youtube_api_var.set(config.get("youtube_api_key", ""))
-                self.pixabay_api_var.set(config.get("pixabay_api_key", ""))
-                
-                return config
-        except Exception as e:
-            self.add_log(f"Konfigürasyon yükleme hatası: {str(e)}")
-            return {}
     
     def generate_topic(self):
         """OpenAI API ile otomatik konu üretme"""
@@ -772,6 +394,33 @@ class MMotoApp(ctk.CTk):
     def add_log(self, message):
         """Log mesajını kuyruğa ekler"""
         self.log_queue.put(message)
+    
+    def process_logs(self):
+        """Log kuyruğundan mesajları işler"""
+        try:
+            while True:
+                message = self.log_queue.get_nowait()
+                self.log_text.insert("end", f"[{self.get_time()}] {message}\n")
+                self.log_text.see("end")  # Otomatik kaydır
+                self.log_queue.task_done()
+        except queue.Empty:
+            pass
+        
+        # İşlemi tekrarla
+        self.after(100, self.process_logs)
+    
+    def get_time(self):
+        """Güncel zamanı formatlar"""
+        return datetime.now().strftime("%H:%M:%S")
+    
+    def load_config(self):
+        """Konfigürasyon dosyasını yükler"""
+        try:
+            with open('config.json', 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            self.add_log(f"Konfigürasyon yükleme hatası: {str(e)}")
+            return {}
 
 def main():
     app = MMotoApp()

@@ -106,7 +106,8 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
             "category_id": "27"  # Education
         }
 
-def write_metadata(project_folder: str, topic: str, keywords: list, model_name: str, voice_name: str) -> Dict[str, Any]:
+def write_metadata(project_folder: str, topic: str, keywords: list, model_name: str, voice_name: str, 
+                language: str = "tr", tts_language: str = "tr", subtitle_language: str = "tr") -> Dict[str, Any]:
     """
     Creates metadata for the video
     
@@ -116,6 +117,9 @@ def write_metadata(project_folder: str, topic: str, keywords: list, model_name: 
         keywords (list): Keywords
         model_name (str): AI model used
         voice_name (str): Voice used
+        language (str): Content language
+        tts_language (str): TTS language
+        subtitle_language (str): Subtitle language
     
     Returns:
         Dict[str, Any]: Created metadata
@@ -161,7 +165,10 @@ def write_metadata(project_folder: str, topic: str, keywords: list, model_name: 
             "creation_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "model": model_name,
             "voice": voice_name,
-            "project_folder": project_folder
+            "project_folder": project_folder,
+            "language": language,
+            "tts_language": tts_language,
+            "subtitle_language": subtitle_language
         }
         
         # Create metadata file
@@ -192,7 +199,10 @@ def write_metadata(project_folder: str, topic: str, keywords: list, model_name: 
             "title": metadata["title"],
             "project_folder": os.path.basename(project_folder),
             "creation_date": metadata["creation_date"],
-            "keywords": keywords
+            "keywords": keywords,
+            "language": language,
+            "tts_language": tts_language,
+            "subtitle_language": subtitle_language
         }
         videos_list.append(video_info)
         
@@ -214,7 +224,10 @@ def write_metadata(project_folder: str, topic: str, keywords: list, model_name: 
                 "content": f"Interesting information about {topic}.",
                 "keywords": keywords,
                 "category_id": "27",  # Education
-                "creation_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "creation_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "language": language,
+                "tts_language": tts_language,
+                "subtitle_language": subtitle_language
             }
             with open(os.path.join(project_folder, "basic_metadata.json"), "w", encoding="utf-8") as f:
                 json.dump(basic_metadata, f, ensure_ascii=False, indent=4)
@@ -223,5 +236,8 @@ def write_metadata(project_folder: str, topic: str, keywords: list, model_name: 
             return {
                 "topic": topic,
                 "title": f"Facts About {topic}",
-                "keywords": keywords
+                "keywords": keywords,
+                "language": language,
+                "tts_language": tts_language,
+                "subtitle_language": subtitle_language
             } 

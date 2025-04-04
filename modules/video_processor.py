@@ -321,8 +321,13 @@ def create_empty_video(project_folder: str, resolution: Tuple[int, int], ffmpeg_
     try:
         output_path = os.path.join(project_folder, "processed_video.mp4")
         
+        # Çözünürlüğü doğru şekilde formatla
+        width, height = resolution
+        if not isinstance(width, int) or not isinstance(height, int):
+            width, height = 1080, 1920  # Varsayılan çözünürlük
+        
         # 5 saniyelik siyah bir video oluştur
-        cmd = f'"{ffmpeg_path}" -f lavfi -i color=c=black:s={resolution[0]}x{resolution[1]}:d=5 -c:v libx264 -pix_fmt yuv420p -r 30 "{os.path.abspath(output_path)}"'
+        cmd = f'"{ffmpeg_path}" -f lavfi -i color=c=black:s={width}x{height}:d=5 -c:v libx264 -pix_fmt yuv420p -r 30 "{os.path.abspath(output_path)}"'
         print(f"Boş video oluşturma komutu: {cmd}")
         
         subprocess.run(cmd, shell=True, check=True)
@@ -330,9 +335,22 @@ def create_empty_video(project_folder: str, resolution: Tuple[int, int], ffmpeg_
         print(f"Boş video oluşturuldu: {output_path}")
     except Exception as e:
         print(f"Boş video oluşturma hatası: {str(e)}")
-        # Daha basit bir yöntem dene
+        # Daha basit bir yöntem dene - bir örnek video dosyası kopayala
         try:
-            with open(os.path.join(project_folder, "processed_video.mp4"), 'wb') as f:
-                f.write(b'')
-        except:
-            pass
+            # Örnek bir video dosyası varsa kopyala
+            sample_video = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "sample.mp4")
+            if os.path.exists(sample_video):
+                shutil.copy(sample_video, os.path.join(project_folder, "processed_video.mp4"))
+                print(f"Örnek video kopyalandı: {sample_video}")
+            else:
+                # Başarısız olursa boş bir dosya oluştur
+                with open(os.path.join(project_folder, "processed_video.mp4"), 'wb') as f:
+                    f.write(b'')
+        except Exception as e:
+            print(f"Yedek video oluşturma hatası: {str(e)}")
+            # Son çare olarak boş dosya oluştur
+            try:
+                with open(os.path.join(project_folder, "processed_video.mp4"), 'wb') as f:
+                    f.write(b'')
+            except:
+                pass

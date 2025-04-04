@@ -10,6 +10,7 @@ import json
 import textwrap
 import re
 from datetime import datetime
+from openai import OpenAI
 
 # PIL modülünü dahil et (kurulu değilse uyarı ver)
 try:
@@ -18,6 +19,75 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
     print("Uyarı: PIL kütüphanesi bulunamadı. PNG altyazı yöntemi kullanılamayacak.")
+
+# Metni belirtilen dile çeviren fonksiyon
+def translate_text(text: str, source_language: str, target_language: str, openai_api_key: str) -> str:
+    """
+    Metni belirtilen dile çevirir
+    
+    Args:
+        text (str): Çevrilecek metin
+        source_language (str): Kaynak dil kodu (örn. "tr", "en")
+        target_language (str): Hedef dil kodu (örn. "tr", "en")
+        openai_api_key (str): OpenAI API anahtarı
+    
+    Returns:
+        str: Çevrilmiş metin
+    """
+    # Diller aynıysa çeviriye gerek yok
+    if source_language == target_language or not text.strip() or not openai_api_key:
+        return text
+    
+    try:
+        # Dil isimlerini belirle
+        language_names = {
+            "tr": "Turkish",
+            "en": "English",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian",
+            "pt": "Portuguese",
+            "ru": "Russian",
+            "ar": "Arabic",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "zh": "Chinese"
+        }
+        
+        source_lang_name = language_names.get(source_language, "Unknown")
+        target_lang_name = language_names.get(target_language, "English")
+        
+        # OpenAI API'sini kullan
+        client = OpenAI(api_key=openai_api_key)
+        
+        prompt = f"""
+        Translate the following {source_lang_name} text to {target_lang_name}. 
+        Keep the original meaning, tone, and style as much as possible.
+        Only return the translated text, with no explanations or additional text.
+        
+        Text to translate: {text}
+        """
+        
+        # API isteği gönder
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a professional translator."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=500
+        )
+        
+        # Çevrilmiş metni al
+        translated_text = response.choices[0].message.content.strip()
+        
+        return translated_text
+    
+    except Exception as e:
+        print(f"Çeviri hatası: {str(e)}")
+        return text  # Hata durumunda orijinal metni döndür
 
 def create_word_level_ass(sentences: List[str], timings: List[Dict[str, Any]], output_path: str) -> bool:
     """
@@ -124,7 +194,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         print(f"ASS dosyası oluşturma hatası: {str(e)}")
         return False
 
-def render_subtitles(video_path: str, sentences: List[str], font_path: str, project_folder: str) -> str:
+def render_subtitles(video_path: str, sentences: List[str], font_path: str, project_folder: str, 
+                     subtitle_language: str = "tr", content_language: str = "tr", openai_api_key: str = "") -> str:
     """
     Videoya altyazı ekler
     
@@ -133,6 +204,9 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
         sentences (List[str]): Eklenecek altyazılar
         font_path (str): Kullanılacak font dosyasının yolu
         project_folder (str): Proje klasörünün yolu
+        subtitle_language (str): Altyazı dili (default: "tr")
+        content_language (str): İçerik dili (default: "tr")
+        openai_api_key (str): OpenAI API anahtarı (çeviri için)
     
     Returns:
         str: Altyazı eklenmiş video dosyasının yolu
@@ -145,13 +219,25 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
     ffmpeg_path = "ffmpeg"  # Varsayılan değer
     ffprobe_path = "ffprobe"  # Varsayılan değer
     
+    # Eğer altyazı dili ile içerik dili farklıysa, çeviri yap
+    translated_sentences = sentences
+    if subtitle_language != content_language and openai_api_key:
+        print(f"Altyazılar {content_language} dilinden {subtitle_language} diline çevriliyor...")
+        translated_sentences = []
+        for sentence in sentences:
+            translated = translate_text(sentence, content_language, subtitle_language, openai_api_key)
+            translated_sentences.append(translated)
+            print(f"Çeviri: {sentence} -> {translated}")
+    
     with open(subtitle_log_path, "w", encoding="utf-8") as log_file:
         log_file.write(f"=== Altyazı İşlemi Başlangıcı: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
         log_file.write(f"Video yolu: {video_path}\n")
         log_file.write(f"Font yolu: {font_path}\n")
-        log_file.write(f"Altyazı sayısı: {len(sentences)}\n\n")
+        log_file.write(f"Altyazı dili: {subtitle_language}\n")
+        log_file.write(f"İçerik dili: {content_language}\n")
+        log_file.write(f"Altyazı sayısı: {len(translated_sentences)}\n\n")
         log_file.write("--- Altyazı İçerikleri ---\n")
-        for i, sentence in enumerate(sentences):
+        for i, sentence in enumerate(translated_sentences):
             log_file.write(f"Altyazı {i+1}: {sentence}\n")
         log_file.write("\n")
     
@@ -192,7 +278,7 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
 """)
         
         # Altyazıları ekle
-        for i, sentence in enumerate(sentences):
+        for i, sentence in enumerate(translated_sentences):
             # Cümleyi daha anlamlı bir şekilde böl
             sentence = sentence.strip()
             
@@ -345,21 +431,21 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                             log_file.write(f"Ses dosyası {os.path.basename(audio_file)} süresi: {file_duration:.2f} saniye\n")
                     except Exception as e:
                         # Süre alınamazsa cümle sayısına göre yaklaşık bir süre hesapla
-                        estimated_duration = duration / len(sentences)
+                        estimated_duration = duration / len(translated_sentences)
                         audio_durations.append(estimated_duration)
                         audio_total_duration += estimated_duration
                         with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
                             log_file.write(f"Ses dosyası {os.path.basename(audio_file)} süre alınamadı: {str(e)}, tahmin edildi: {estimated_duration:.2f} saniye\n")
             
             # Ses dosyası sayısı ile cümle sayısı farklı ise ayarlama yap
-            if len(audio_durations) != len(sentences):
+            if len(audio_durations) != len(translated_sentences):
                 with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write(f"UYARI: Ses dosyası sayısı ({len(audio_durations)}) ve cümle sayısı ({len(sentences)}) eşleşmiyor!\n")
+                    log_file.write(f"UYARI: Ses dosyası sayısı ({len(audio_durations)}) ve cümle sayısı ({len(translated_sentences)}) eşleşmiyor!\n")
                 
                 # Ses dosyası sayısı daha az ise, eksik olanları tahmin et
-                if len(audio_durations) < len(sentences):
+                if len(audio_durations) < len(translated_sentences):
                     remaining_duration = max(0, duration - audio_total_duration)
-                    remaining_sentences = len(sentences) - len(audio_durations)
+                    remaining_sentences = len(translated_sentences) - len(audio_durations)
                     estimated_per_sentence = remaining_duration / max(1, remaining_sentences)
                     
                     for i in range(remaining_sentences):
@@ -369,20 +455,20 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                             log_file.write(f"Eksik ses dosyası için tahmin: {estimated_per_sentence:.2f} saniye\n")
                 
                 # Ses dosyası sayısı daha fazla ise, fazla olanları yok say
-                elif len(audio_durations) > len(sentences):
-                    audio_durations = audio_durations[:len(sentences)]
+                elif len(audio_durations) > len(translated_sentences):
+                    audio_durations = audio_durations[:len(translated_sentences)]
                     audio_total_duration = sum(audio_durations)
                     with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
                         log_file.write(f"Fazla ses dosyaları yok sayıldı. Toplam süre: {audio_total_duration:.2f} saniye\n")
         else:
             # TTS klasörü yoksa, cümle sayısına göre eşit süre böl
-            for i in range(len(sentences)):
-                estimated_duration = duration / len(sentences)
+            for i in range(len(translated_sentences)):
+                estimated_duration = duration / len(translated_sentences)
                 audio_durations.append(estimated_duration)
                 audio_total_duration += estimated_duration
             
             with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"TTS klasörü bulunamadı, her cümle için tahmini süre: {duration/len(sentences):.2f} saniye\n")
+                log_file.write(f"TTS klasörü bulunamadı, her cümle için tahmini süre: {duration/len(translated_sentences):.2f} saniye\n")
         
         # Kelime zamanlamalarını yükle
         word_timings = load_word_timings(project_folder)
@@ -404,7 +490,7 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                     log_file.write(f"Anton-Regular.ttf fontu kullanılacak: {font_path}\n")
             
             # Kelime seviyesinde ASS oluştur
-            if create_word_level_ass(sentences, word_timings, ass_path):
+            if create_word_level_ass(translated_sentences, word_timings, ass_path):
                 with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
                     log_file.write(f"Kelime seviyesinde ASS dosyası oluşturuldu: {ass_path}\n\n")
                 
@@ -446,7 +532,7 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
             
             # ASS başarısız olduysa veya oluşturulamadıysa, SRT ile devam et
             # Kelime seviyesinde SRT oluştur
-            create_word_level_srt(sentences, word_timings, srt_path)
+            create_word_level_srt(translated_sentences, word_timings, srt_path)
             
             with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
                 log_file.write(f"Kelime seviyesinde SRT dosyası oluşturuldu: {srt_path}\n\n")
@@ -459,7 +545,7 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                 subtitle_index = 1
                 current_time = 0
                 
-                for i, sentence in enumerate(sentences):
+                for i, sentence in enumerate(translated_sentences):
                     if i < len(audio_durations):
                         total_duration = audio_durations[i]
                         
@@ -475,11 +561,11 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                         current_time = second_half_end
                         
                         # Küçük bir boşluk ekleyelim
-                        if i < len(sentences) - 1:
+                        if i < len(translated_sentences) - 1:
                             current_time += 0.1
                     else:
                         # Eğer ses dosyası yoksa varsayılan hesaplama kullan
-                        total_duration = duration / max(1, len(sentences))
+                        total_duration = duration / max(1, len(translated_sentences))
                         first_half_start = i * total_duration
                         first_half_end = first_half_start + (total_duration / 2)
                         second_half_start = first_half_end
@@ -585,7 +671,7 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                 else:
                     font_param = ""
                 
-                for i, sentence in enumerate(sentences):
+                for i, sentence in enumerate(translated_sentences):
                     # Zamanlamayı ses dosyalarına göre hesapla
                     if i < len(audio_durations):
                         total_duration = audio_durations[i]
@@ -595,7 +681,7 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                         second_half_end = current_time + total_duration
                         current_time = second_half_end + 0.1  # Küçük bir boşluk ekle
                     else:
-                        total_duration = duration / max(1, len(sentences))
+                        total_duration = duration / max(1, len(translated_sentences))
                         first_half_start = i * total_duration
                         first_half_end = first_half_start + (total_duration / 2)
                         second_half_start = first_half_end

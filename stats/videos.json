@@ -803,5 +803,133 @@
             "City",
             "Atlantis"
         ]
+    },
+    {
+        "topic": "Why Were Castles So Deadly? 🏰⚔️",
+        "title": "Castles: Deadly Fortresses of the Past! 🏰⚔️",
+        "project_folder": "video_2025-04-04_21-44-04",
+        "creation_date": "2025-04-04 21:47:46",
+        "keywords": [
+            "Were",
+            "Castles",
+            "Deadly",
+            "🏰⚔️",
+            "Their"
+        ]
+    },
+    {
+        "topic": "Why Robots Can't Cry 🤖😢",
+        "title": "Why Robots Can't Shed Tears 🤖😢",
+        "project_folder": "video_2025-04-04_21-48-21",
+        "creation_date": "2025-04-04 21:50:57",
+        "keywords": [
+            "Robots",
+            "Can't",
+            "Cry",
+            "Crying",
+            "Humans"
+        ]
+    },
+    {
+        "topic": "Dünya Dönmeyi Durdurursa Ne Olur? 🌍💥",
+        "title": "Dünya Dursa Ne Olur? 🌍 Şok Edici Gerçekler!",
+        "project_folder": "video_2025-04-04_22-48-24",
+        "creation_date": "2025-04-04 22:48:50",
+        "keywords": [
+            "Dünya",
+            "Dönmeyi",
+            "Durdurursa",
+            "Olur",
+            "Lütfen"
+        ]
+    },
+    {
+        "topic": "Arkasındaki Sır: Çölün Kumları Neden Sıcak? 🏜️🔥",
+        "title": "Çöl Kumlarının Sıcak Sırrı! 🌞🏜️",
+        "project_folder": "video_2025-04-04_22-47-59",
+        "creation_date": "2025-04-04 22:48:59",
+        "keywords": [
+            "Desert",
+            "Sand",
+            "Sunlight",
+            "Heat",
+            "Temperature"
+        ]
+    },
+    {
+        "topic": "Nasıl Daha Uzun Yaşarız? 🤔🧬",
+        "title": "Uzun Yaşam Sırrı: Bilim Ne Diyor? 🧬✨",
+        "project_folder": "video_2025-04-04_22-49-21",
+        "creation_date": "2025-04-04 22:49:46",
+        "keywords": [
+            "Daha",
+            "Uzun",
+            "Yaşarız",
+            "Lütfen"
+        ]
+    },
+    {
+        "topic": "¿Qué Pasaría Si Los Gatos Pudieran Hablar? 🐱🗣️",
+        "title": "Si Los Gatos Pudieran Hablar... 😺🗣️ ¡Descúbrelo!",
+        "project_folder": "video_2025-04-04_23-45-35",
+        "creation_date": "2025-04-04 23:48:09",
+        "keywords": [
+            "Cats",
+            "Talking",
+            "Night",
+            "Boxes",
+            "Water"
+        ],
+        "language": "es",
+        "tts_language": "es",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "¿Por Qué Temblamos Cuando Hace Frío? ❄️🤔",
+        "title": "¿Por Qué Temblamos con el Frío? ❄️ Descúbrelo Ahora!",
+        "project_folder": "video_2025-04-04_23-48-28",
+        "creation_date": "2025-04-04 23:51:11",
+        "keywords": [
+            "Shivering",
+            "Cold",
+            "Muscles",
+            "Nervous",
+            "Temperature"
+        ],
+        "language": "es",
+        "tts_language": "es",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "Why Do We Blush? 🌹🤔",
+        "title": "Why Do We Blush? Unveiling the Mystery! 🌹🤔",
+        "project_folder": "video_2025-04-05_01-09-21",
+        "creation_date": "2025-04-05 01:12:11",
+        "keywords": [
+            "Blushing",
+            "Blood",
+            "Face",
+            "Emotions",
+            "Skin"
+        ],
+        "language": "en",
+        "tts_language": "en",
+        "subtitle_language": "en"
+    },
+    {
+        "topic": "Pourquoi Napoléon A-t-il Vraiment Perdu ? 🤔📜",
+        "title": "Pourquoi Napoléon A-t-il Vraiment Perdu ? 🤔",
+        "project_folder": "video_2025-04-05_01-16-15",
+        "creation_date": "2025-04-05 01:19:26",
+        "keywords": [
+            "Napoleon",
+            "Russia",
+            "Winter",
+            "Battle",
+            "Waterloo"
+        ],
+        "language": "fr",
+        "tts_language": "fr",
+        "subtitle_language": "tr"
     }
 ]

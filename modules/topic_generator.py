@@ -415,6 +415,159 @@ def generate_topics_batch(api_key, count=15, english=True):
         random.shuffle(default_topics)
         return default_topics[:count]
 
+def generate_topic_international(api_key, language="es", category=None):
+    """
+    GPT-4o API kullanarak farklı dillerde özgün bir konu üretir
+    
+    Args:
+        api_key (str): OpenAI API anahtarı
+        language (str): Hedef dil kodu ("es", "fr", "de" vb.)
+        category (str, optional): Konu kategorisi. Belirtilmezse rastgele kategori seçilir.
+    
+    Returns:
+        str: Üretilen konu
+    """
+    # Dil adını ayarla
+    lang_names = {
+        "es": "Spanish",
+        "fr": "French", 
+        "de": "German",
+        "it": "Italian",
+        "pt": "Portuguese", 
+        "ru": "Russian",
+        "ar": "Arabic"
+    }
+    lang_name = lang_names.get(language, "Spanish")  # Varsayılan İspanyolca
+    
+    # Kategori seçimi - İngilizce kategorileri kullan
+    categories = [
+        "Science", "History", "Technology", "Nature", "Space", "Interesting Facts",
+        "Animals", "Geography", "Art", "Sports", "Health", "Psychology",
+        "Human Body", "AI", "Inventions", "Strange Facts"
+    ]
+    
+    if not category:
+        category = random.choice(categories)
+    
+    try:
+        # OpenAI istemcisini başlat
+        client = OpenAI(api_key=api_key)
+        
+        # Dile özel formatlar
+        title_formats = {
+            "es": [
+                "Qué Pasaría Si...",
+                "Por Qué...",
+                "Cómo...",
+                "Esta Es La Razón...",
+                "No Creerás...",
+                "El Secreto Detrás De..."
+            ],
+            "fr": [
+                "Que Se Passerait-il Si...",
+                "Pourquoi...",
+                "Comment...",
+                "Voici Pourquoi...",
+                "Vous Ne Croirez Pas...",
+                "Le Secret Derrière..."
+            ],
+            "de": [
+                "Was Wäre Wenn...",
+                "Warum...",
+                "Wie...",
+                "Darum...",
+                "Du Wirst Nicht Glauben...",
+                "Das Geheimnis Hinter..."
+            ]
+        }
+        
+        # Varsayılan formatlar (dil listede yoksa)
+        default_formats = [
+            "What If...",
+            "Why...",
+            "How...",
+            "This Is Why...",
+            "You Won't Believe...",
+            "The Secret Behind..."
+        ]
+        
+        # Dile göre formatları al
+        formats = title_formats.get(language, default_formats)
+        formats_text = "\n".join([f"- {f}" for f in formats])
+        
+        # GPT-4o ile konu üretimi - viral başlık formatında (hedef dilde)
+        prompt = f"""
+        Act as a viral YouTube Shorts content strategist for a {lang_name} channel.
+        Generate an engaging, curiosity-driven video title using viral language and relevant emojis.
+        
+        Use formats like:
+        {formats_text}
+        
+        The title should:
+        1. Be COMPLETELY in {lang_name} ONLY
+        2. Include 1-2 relevant emojis
+        3. Be short and catchy (5-10 words)
+        4. Use question format if possible
+        5. Spark curiosity
+        
+        Category: {category}
+        
+        Output only the title in {lang_name}, no explanations or additional text.
+        """
+        
+        # API isteği
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": f"You are an expert at creating viral YouTube Shorts titles in {lang_name} ONLY. Always include emojis in your titles. NEVER use any other language than {lang_name}."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.9,
+            max_tokens=100
+        )
+        
+        # Yanıtı al ve temizle
+        topic = response.choices[0].message.content.strip()
+        
+        # Başında veya sonunda gereksiz karakterler varsa temizle
+        topic = topic.strip('"\'.,;:!?')
+        
+        # Log ekle
+        print(f"Üretilen {lang_name} başlık: {topic}")
+        
+        return topic
+        
+    except Exception as e:
+        logging.error(f"Konu üretme hatası ({lang_name}): {str(e)}")
+        
+        # Hata durumunda varsayılan konular (dile göre)
+        default_topics = {
+            "es": [
+                "¿Qué Pasaría Si La Tierra Dejara De Girar? 🌍💥",
+                "¿Por Qué Soñamos? 🧠💤",
+                "El Secreto Detrás De Las Pirámides 🏜️🔺",
+                "¿Pueden Pensar Los Robots? 🤖🧠"
+            ],
+            "fr": [
+                "Que Se Passerait-il Si La Terre Arrêtait De Tourner? 🌍💥",
+                "Pourquoi Rêvons-nous? 🧠💤",
+                "Le Secret Derrière Les Pyramides 🏜️🔺",
+                "Les Robots Peuvent-ils Penser? 🤖🧠"
+            ],
+            "de": [
+                "Was Wäre Wenn Die Erde Aufhören Würde Sich Zu Drehen? 🌍💥",
+                "Warum Träumen Wir? 🧠💤",
+                "Das Geheimnis Hinter Den Pyramiden 🏜️🔺",
+                "Können Roboter Denken? 🤖🧠"
+            ]
+        }
+        
+        # Dile göre varsayılan konuları seç, yoksa İspanyolca konuları kullan
+        topics_list = default_topics.get(language, default_topics["es"])
+        topic = random.choice(topics_list)
+        
+        return topic
+
 # Test için
 if __name__ == "__main__":
     # config.json'dan API anahtarını al
