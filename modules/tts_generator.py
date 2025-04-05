@@ -204,6 +204,13 @@ def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder:
                 "es": {"voice": voice, "speed": 1.1},
                 "fr": {"voice": voice, "speed": 1.1},
                 "de": {"voice": voice, "speed": 1.1},
+                "it": {"voice": voice, "speed": 1.1},
+                "pt": {"voice": voice, "speed": 1.1},
+                "ru": {"voice": voice, "speed": 1.0},
+                "zh": {"voice": voice, "speed": 0.9},
+                "ja": {"voice": voice, "speed": 1.0},
+                "ko": {"voice": voice, "speed": 1.0},
+                "ar": {"voice": voice, "speed": 1.1}
             }
             
             # Dile göre ayarları al veya varsayılan kullan

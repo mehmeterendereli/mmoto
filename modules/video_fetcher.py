@@ -179,7 +179,10 @@ async def translate_keywords_to_english(keywords: List[str], openai_api_key: str
             "it": "Italian",
             "pt": "Portuguese",
             "ru": "Russian",
-            "ar": "Arabic"
+            "ar": "Arabic",
+            "zh": "Chinese",
+            "ja": "Japanese",
+            "ko": "Korean"
         }
         
         source_lang_name = language_names.get(source_language, "unknown")

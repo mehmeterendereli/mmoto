@@ -931,5 +931,53 @@
         "language": "fr",
         "tts_language": "fr",
         "subtitle_language": "tr"
+    },
+    {
+        "topic": "Pourquoi les Chats Adorent-ils le Papier ? 🐱📄",
+        "title": "Pourquoi les Chats Adorent le Papier ? 🐱📄",
+        "project_folder": "video_2025-04-05_03-54-59",
+        "creation_date": "2025-04-05 03:56:58",
+        "keywords": [
+            "Cat",
+            "Paper",
+            "Texture",
+            "Play",
+            "Curiosity"
+        ],
+        "language": "fr",
+        "tts_language": "fr",
+        "subtitle_language": "fr"
+    },
+    {
+        "topic": "Почему 🧠 наш мозг забывает важное",
+        "title": "Почему мозг забывает важное? 🧠",
+        "project_folder": "video_2025-04-05_04-02-41",
+        "creation_date": "2025-04-05 04:05:11",
+        "keywords": [
+            "Brain",
+            "Stress",
+            "Memory",
+            "Multitasking",
+            "Emotion"
+        ],
+        "language": "ru",
+        "tts_language": "ru",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "How Walking 15 Minutes Daily Transforms You! 🚶‍♂️💪",
+        "title": "15-Minute Walk: Your Daily Transformational Boost! 🌟",
+        "project_folder": "video_2025-04-05_04-27-28",
+        "creation_date": "2025-04-05 04:29:51",
+        "keywords": [
+            "Walking",
+            "Cardiovascular",
+            "Mood",
+            "Muscles",
+            "Memory"
+        ],
+        "language": "en",
+        "tts_language": "en",
+        "subtitle_language": "en"
     }
 ]

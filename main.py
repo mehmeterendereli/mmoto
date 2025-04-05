@@ -42,7 +42,7 @@ def load_config():
 
 async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixabay_api_key="", youtube_api_key="", 
                               language="tr", tts_language="tr", subtitle_language="tr", max_videos=None, 
-                              continuous_mode=False, log_callback=None):
+                              continuous_mode=False, log_callback=None, upload_to_youtube=True):
     """
     Tek bir video işleme süreci için asenkron fonksiyon
     
@@ -58,6 +58,7 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
         max_videos (int): Maksimum video sayısı
         continuous_mode (bool): Sürekli çalışma modu
         log_callback (callable): Log mesajlarını göndermek için callback fonksiyonu
+        upload_to_youtube (bool): Video YouTube'a yüklensin mi
         
     Returns:
         tuple: (success, video_url) - İşlem başarılı mı ve video URL'si
@@ -73,6 +74,7 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
     log_message(f"Kullanılan içerik dili: {language}")
     log_message(f"Kullanılan seslendirme dili: {tts_language}")
     log_message(f"Kullanılan altyazı dili: {subtitle_language}")
+    log_message(f"YouTube'a yükleme: {'Evet' if upload_to_youtube else 'Hayır'}")
     
     final_video_path = None
     video_url = None
@@ -94,8 +96,18 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
         
         # 3. CONTENT GENERATION - ADIM 3: İçerik Oluşturma (İçerik dili kullanılır)
         try:
+            # İçerik oluşturmadan önce kullanılan dili ayrıntılı log'la
+            log_message(f"İçerik oluşturma başlatılıyor - İçerik dili: {language}")
+            
             content_data = generate_content(topic, language=language)
             log_message(f"{language} dilinde içerik oluşturuldu")
+            
+            # İçerik oluşturma başarılı mı kontrol et ve dili doğrula
+            if content_data and "response" in content_data and content_data["response"]:
+                log_message(f"İçerik başarıyla oluşturuldu - Oluşturulan {len(content_data['response'])} cümle")
+                # İlk cümleyi log'la (uzun olmayacak şekilde)
+                first_sentence = content_data["response"][0]
+                log_message(f"İlk cümle örneği: {first_sentence[:50]}...")
             
             # İçerik metinlerini dosyalara kaydet
             for i, sentence in enumerate(content_data["response"]):
@@ -241,57 +253,59 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
         except Exception as e:
             log_message(f"Metadata oluşturma hatası: {str(e)}", True)
             metadata = {
-                "topic": topic,
                 "title": f"Facts About {topic}",
-                "keywords": keywords,
-                "language": language,
-                "tts_language": tts_language,
-                "subtitle_language": subtitle_language
+                "keywords": keywords if keywords else ["educational", "shorts", "facts"],
+                "content": "\n".join(content_data["response"]) + "\n\n#Shorts #Educational" if content_data and "response" in content_data else "",
+                "category_id": "27"
             }
         
         log_message(f"Process completed! Final video: {final_video_path}")
         
-        # 12. VIDEO UPLOAD - ADIM 12: YouTube'a Yükleme (İsteğe bağlı)
-        if youtube_api_key:
-            log_message("Starting automatic YouTube upload...")
+        # 12. YOUTUBE UPLOAD - ADIM 11: YouTube'a Yükleme
+        # YouTube API key kontrolü ve YouTube'a yükleme seçeneği kontrolü
+        if youtube_api_key and upload_to_youtube:
             try:
-                # Metadata kontrolü ve eksik verileri tamamlama
-                metadata_path = os.path.join(project_folder, "metadata.json")
-                if not os.path.exists(metadata_path):
-                    log_message("Metadata file not found, creating backup metadata")
-                    backup_metadata = {
-                        "topic": topic,
-                        "title": f"Facts About {topic}",
-                        "content": "\n".join(content_data["response"]) + "\n\n#Shorts #Educational",
-                        "keywords": keywords + ["educational", "shorts", "facts"],
+                # Create metadata for YouTube upload
+                metadata = {}
+                metadata_file = os.path.join(project_folder, "metadata.json")
+                
+                try:
+                    # Başlık oluştur
+                    title = f"Facts About {topic}"
+                    
+                    # Etiketler oluştur (anahtar kelimelerden)
+                    tags = keywords
+                    
+                    # Açıklama oluştur
+                    description = "\n".join(content_data["response"]) + "\n\n#Shorts #Educational"
+                    
+                    # İçerik başlığı
+                    # get_content_title fonksiyonu tanımlı değil, o yüzden doğrudan başlık kullanacağız
+                    # content_title = get_content_title(topic)
+                    # if content_title:
+                    #     title = content_title
+                    
+                    # Basic metadata
+                    metadata = {
+                        "title": title,
+                        "keywords": tags,
+                        "content": description,
                         "category_id": "27",  # Education
+                        "language": language,
                         "creation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "language": language,
                         "tts_language": tts_language,
                         "subtitle_language": subtitle_language
                     }
-                    with open(metadata_path, "w", encoding="utf-8") as f:
-                        json.dump(backup_metadata, f, ensure_ascii=False, indent=4)
-                    metadata = backup_metadata
-                    log_message("Backup metadata created successfully")
-                else:
-                    # Metadata dosyası varsa oku
-                    try:
-                        with open(metadata_path, "r", encoding="utf-8") as f:
-                            metadata = json.load(f)
-                    except Exception as e:
-                        log_message(f"Error reading metadata file: {str(e)}, using backup metadata", True)
-                        metadata = {
-                            "topic": topic,
-                            "title": f"Facts About {topic}",
-                            "content": "\n".join(content_data["response"]) + "\n\n#Shorts #Educational",
-                            "keywords": keywords + ["educational", "shorts", "facts"],
-                            "category_id": "27",  # Education
-                            "creation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "language": language,
-                            "tts_language": tts_language,
-                            "subtitle_language": subtitle_language
-                        }
+                except Exception as e:
+                    log_message(f"Metadata oluşturma hatası: {str(e)}", True)
+                    # Temel metadata oluştur
+                    metadata = {
+                        "title": f"Facts About {topic}",
+                        "keywords": keywords if keywords else ["educational", "shorts", "facts"],
+                        "content": "\n".join(content_data["response"]) + "\n\n#Shorts #Educational" if content_data and "response" in content_data else "",
+                        "category_id": "27"
+                    }
                 
                 # Başlık ve açıklama uzunluğunu kontrol et
                 title = metadata.get("title", f"Facts About {topic}")
@@ -361,9 +375,12 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
             except Exception as e:
                 log_message(f"Error during upload: {str(e)}", True)
         else:
-            # YouTube API anahtarı yoksa yükleme yapmadan işlemi tamamla
+            # YouTube API anahtarı yoksa veya yükleme devre dışı bırakıldıysa
+            if not upload_to_youtube:
+                log_message("YouTube'a yükleme devre dışı bırakıldı, video yerel olarak kaydedildi.")
+            elif not youtube_api_key:
+                log_message("YouTube API key not provided, skipping upload.")
             success = True
-            log_message("YouTube API key not provided, skipping upload.")
         
         # Son bir kontrol - herhangi bir video oluşturulduysa başarılı say
         if os.path.exists(final_video_path) and os.path.getsize(final_video_path) > 0:
@@ -379,7 +396,7 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
         log_message(f"An error occurred: {str(e)}", True)
         return False, None
 
-async def async_main(continuous_mode=False, max_videos=None, language='tr', tts_language='tr', subtitle_language='tr'):
+async def async_main(continuous_mode=False, max_videos=None, language='tr', tts_language='tr', subtitle_language='tr', upload_to_youtube=True):
     """Ana asenkron fonksiyon, sürekli mod desteği ile"""
     # Logging settings
     logging.basicConfig(
@@ -428,6 +445,10 @@ async def async_main(continuous_mode=False, max_videos=None, language='tr', tts_
                     if topic.lower() == 'q':
                         break
                 
+                # YouTube yükleme durumunu logla
+                if not upload_to_youtube:
+                    logger.info(f"YouTube'a yükleme devre dışı. Video yerel olarak kaydedilecek.")
+                
                 # Video işleme - doğru dil parametrelerini kullanarak
                 success, video_url = await process_single_video(
                     topic, 
@@ -439,7 +460,8 @@ async def async_main(continuous_mode=False, max_videos=None, language='tr', tts_
                     tts_language,  # Seslendirme dili
                     subtitle_language,  # Altyazı dili
                     max_videos, 
-                    continuous_mode
+                    continuous_mode,
+                    upload_to_youtube=upload_to_youtube  # YouTube'a yükleme seçeneği
                 )
                 
                 # Video sayacını artır
@@ -504,6 +526,12 @@ def main():
         continuous_mode = "--continuous" in sys.argv or "-c" in sys.argv
         max_videos = None
         
+        # YouTube'a yükleme seçeneği
+        upload_to_youtube = True
+        if "--no-upload" in sys.argv or "--skip-upload" in sys.argv:
+            upload_to_youtube = False
+            print("YouTube'a yükleme devre dışı bırakıldı. Video yerel olarak kaydedilecek.")
+        
         # Varsayılan dil ayarları
         language = 'tr'  # İçerik dili
         tts_language = 'tr'  # TTS dili
@@ -542,6 +570,7 @@ def main():
             print("Content Language / İçerik Dili: " + language)
             print("TTS Language / Seslendirme Dili: " + tts_language)
             print("Subtitle Language / Altyazı Dili: " + subtitle_language)
+            print(f"Upload to YouTube / YouTube'a Yükleme: {'Yes/Evet' if upload_to_youtube else 'No/Hayır'}")
             
             print("The program will automatically create and upload videos" if language == 'en' else "Program, GPT tarafından üretilen konulara göre otomatik olarak")
             print("based on topics generated by GPT." if language == 'en' else "video oluşturup YouTube'a yükleyecek.")
@@ -555,7 +584,8 @@ def main():
             max_videos=max_videos, 
             language=language, 
             tts_language=tts_language, 
-            subtitle_language=subtitle_language
+            subtitle_language=subtitle_language,
+            upload_to_youtube=upload_to_youtube
         ), debug=False)
         
         # Add a short delay to allow for any pending operations to complete

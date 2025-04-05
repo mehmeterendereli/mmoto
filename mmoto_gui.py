@@ -109,6 +109,7 @@ class MMotoApp(ctk.CTk):
         self.status_var = ctk.StringVar(value=_("ready"))
         self.continuous_var = ctk.BooleanVar(value=False)
         self.max_videos_var = ctk.StringVar(value="5")
+        self.upload_to_youtube_var = ctk.BooleanVar(value=True)  # YouTube yükleme seçeneği, varsayılan olarak açık
         
         # Dil değişkenleri - varsayılan değerlerle başlatıyoruz
         self.ui_language_var = ctk.StringVar(value=DEFAULT_UI_LANGUAGE)
@@ -299,6 +300,14 @@ class MMotoApp(ctk.CTk):
             command=self.toggle_continuous_mode
         )
         self.continuous_check.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        # YouTube'a yükleme seçeneği
+        self.upload_to_youtube_check = ctk.CTkCheckBox(
+            settings_frame, 
+            text="YouTube'a yüklensin mi?", 
+            variable=self.upload_to_youtube_var
+        )
+        self.upload_to_youtube_check.grid(row=0, column=1, padx=5, pady=5, sticky="w")
         
         # Maksimum video sayısı
         self.max_videos_label = ctk.CTkLabel(settings_frame, text=_("max_videos"))
@@ -564,13 +573,13 @@ class MMotoApp(ctk.CTk):
             for code, key in SUPPORTED_LANGUAGES.items():
                 translated_name = _(key)
                 # Debug: Kontrol edilen dili göster
-                self.add_log(f"Debug: Kontrol: {code} -> {key} -> {translated_name}")
+                # self.add_log(f"Debug: Kontrol: {code} -> {key} -> {translated_name}")
                 
                 if translated_name == selected_name:
                     # Yeni içerik dilini ayarla
                     self.content_language_var.set(code)
-                    # Debug: Yeni içerik dilini göster
-                    self.add_log(f"Debug: Yeni içerik dili ayarlandı: {code}")
+                    # Daha belirgin log mesajı
+                    self.add_log(f"İçerik dili değiştirildi: {code} ({selected_name})")
                     
                     # Hemen config.json dosyasına da kaydet ki dil değişikliği kalıcı olsun
                     try:
@@ -579,9 +588,9 @@ class MMotoApp(ctk.CTk):
                         config["tts_language"] = code
                         with open("config.json", "w", encoding="utf-8") as f:
                             json.dump(config, f, indent=2, ensure_ascii=False)
-                        self.add_log(f"Debug: İçerik dili doğrudan config.json'a kaydedildi: {code}")
+                        self.add_log(f"İçerik dili config.json'a kaydedildi: {code}")
                     except Exception as save_error:
-                        self.add_log(f"Debug: Config kaydetme hatası: {str(save_error)}")
+                        self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
                     # Ekranda seçilen dili göster
                     self.add_log(f"{_('content_and_tts_language_changed')}: {selected_name}")
@@ -589,7 +598,7 @@ class MMotoApp(ctk.CTk):
                     break
                     
             if not found:
-                self.add_log(f"Debug: Dil kodu bulunamadı! Seçilen: {selected_name}")
+                self.add_log(f"Hata: Dil kodu bulunamadı! Seçilen: {selected_name}")
                 
         except Exception as e:
             self.add_log(f"{_('error_prefix')}{str(e)}")
@@ -597,25 +606,20 @@ class MMotoApp(ctk.CTk):
     def on_subtitle_language_select(self, selected_name):
         """Altyazı dili seçimi değiştiğinde çağrılır"""
         try:
-            # Debug: Şu anki altyazı dilini göster
-            current_lang = self.subtitle_language_var.get()
-            self.add_log(f"Debug: Mevcut altyazı dili: {current_lang}")
-            
-            # Debug: Seçilen dil adını göster
-            self.add_log(f"Debug: Seçilen altyazı dili adı: {selected_name}")
+            # Mevcut altyazı dilini ve seçileni göster
+            current_subtitle_lang = self.subtitle_language_var.get()
+            self.add_log(f"Mevcut altyazı dili: {current_subtitle_lang}")
+            self.add_log(f"Seçilen altyazı dili adı: {selected_name}")
             
             # Seçilen dil adından dil kodunu bul
             found = False
             for code, key in SUPPORTED_LANGUAGES.items():
                 translated_name = _(key)
-                # Debug: Kontrol edilen dili göster
-                self.add_log(f"Debug: Altyazı kontrol: {code} -> {key} -> {translated_name}")
-                
                 if translated_name == selected_name:
                     # Yeni altyazı dilini ayarla
                     self.subtitle_language_var.set(code)
-                    # Debug: Yeni altyazı dilini göster
-                    self.add_log(f"Debug: Yeni altyazı dili ayarlandı: {code}")
+                    # Daha belirgin log mesajı
+                    self.add_log(f"Altyazı dili değiştirildi: {code} ({selected_name})")
                     
                     # Hemen config.json dosyasına da kaydet
                     try:
@@ -623,9 +627,9 @@ class MMotoApp(ctk.CTk):
                         config["subtitle_language"] = code
                         with open("config.json", "w", encoding="utf-8") as f:
                             json.dump(config, f, indent=2, ensure_ascii=False)
-                        self.add_log(f"Debug: Altyazı dili doğrudan config.json'a kaydedildi: {code}")
+                        self.add_log(f"Altyazı dili config.json'a kaydedildi: {code}")
                     except Exception as save_error:
-                        self.add_log(f"Debug: Altyazı dili config kaydetme hatası: {str(save_error)}")
+                        self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
                     # Ekranda seçilen dili göster
                     self.add_log(f"{_('subtitle_language_changed')}: {selected_name}")
@@ -633,7 +637,7 @@ class MMotoApp(ctk.CTk):
                     break
                     
             if not found:
-                self.add_log(f"Debug: Altyazı dil kodu bulunamadı! Seçilen: {selected_name}")
+                self.add_log(f"Hata: Altyazı dil kodu bulunamadı! Seçilen: {selected_name}")
                 
         except Exception as e:
             self.add_log(f"{_('error_prefix')}{str(e)}")
@@ -797,7 +801,7 @@ class MMotoApp(ctk.CTk):
         """Güncel zamanı formatlar"""
         return datetime.now().strftime("%H:%M:%S")
 
-    def load_config(self):
+    def load_config(self, silent=False):
         """API anahtarlarını ve ayarları config.json dosyasından yükler"""
         try:
             # Config dosyası var mı kontrol et
@@ -816,31 +820,22 @@ class MMotoApp(ctk.CTk):
                 content_lang = config.get("content_language", DEFAULT_CONTENT_LANGUAGE)
                 subtitle_lang = config.get("subtitle_language", DEFAULT_SUBTITLE_LANGUAGE)
                 
-                # Mevcut değerlerle config'deki değerler farklıysa gün
-                # Eğer şu anki içerik dili config'den farklıysa ve boş değilse, 
-                # config'i şu anki değere göre güncelle (dil seçimi yapıldıysa)
-                current_content_lang = self.content_language_var.get()
-                current_subtitle_lang = self.subtitle_language_var.get()
+                # Mevcut değerlerle config'deki değerler farklıysa güncelle
                 config_changed = False
                 
                 # İçerik dili kontrolü
-                if current_content_lang and current_content_lang != content_lang:
-                    self.add_log(f"Debug: İçerik dili çakışması: UI'da {current_content_lang}, Config'de {content_lang}")
-                    content_lang = current_content_lang
-                    # Config'i güncelle
-                    config["content_language"] = current_content_lang
-                    config["tts_language"] = current_content_lang
+                if content_lang != self.content_language_var.get():
+                    self.add_log(f"Debug: İçerik dili çakışması: UI'da {self.content_language_var.get()}, Config'de {content_lang}")
+                    self.content_language_var.set(content_lang)
                     config_changed = True
-                    self.add_log(f"Debug: İçerik dili UI değerine göre güncellendi: {current_content_lang}")
-                    
+                    self.add_log(f"Debug: İçerik dili UI değerine göre güncellendi: {content_lang}")
+                
                 # Altyazı dili kontrolü
-                if current_subtitle_lang and current_subtitle_lang != subtitle_lang:
-                    self.add_log(f"Debug: Altyazı dili çakışması: UI'da {current_subtitle_lang}, Config'de {subtitle_lang}")
-                    subtitle_lang = current_subtitle_lang
-                    # Config'i güncelle
-                    config["subtitle_language"] = current_subtitle_lang
+                if subtitle_lang != self.subtitle_language_var.get():
+                    self.add_log(f"Debug: Altyazı dili çakışması: UI'da {self.subtitle_language_var.get()}, Config'de {subtitle_lang}")
+                    self.subtitle_language_var.set(subtitle_lang)
                     config_changed = True
-                    self.add_log(f"Debug: Altyazı dili UI değerine göre güncellendi: {current_subtitle_lang}")
+                    self.add_log(f"Debug: Altyazı dili UI değerine göre güncellendi: {subtitle_lang}")
                 
                 # Eğer değişiklik varsa config dosyasını kaydet
                 if config_changed:
@@ -850,8 +845,6 @@ class MMotoApp(ctk.CTk):
                 
                 # Dilleri ayarla
                 self.ui_language_var.set(ui_lang)
-                self.content_language_var.set(content_lang)
-                self.subtitle_language_var.set(subtitle_lang)
                 
                 # Yüklenen değerlerle ilgili debug mesajı
                 self.add_log(f"Debug: Yüklenen dil ayarları: UI={ui_lang}, Content={content_lang}, Subtitle={subtitle_lang}")
@@ -960,44 +953,45 @@ class MMotoApp(ctk.CTk):
     def start_process(self):
         """İşlemi başlatır"""
         try:
-            # API anahtarlarını al
-            openai_api_key = self.openai_api_var.get().strip()
+            # Ayarları yükle
+            self.load_config(silent=True)
             
-            # OpenAI API key kontrolü
+            # API anahtarlarını kontrol et
+            openai_api_key = self.openai_api_var.get().strip()
             if not openai_api_key:
                 self.add_log(_("error_no_openai_key"))
                 return
-                
-            # Konu kontrol et
+            
+            # Konu kontrolü
             topic = self.topic_var.get().strip()
-            if not topic:
-                # Eğer sürekli mod etkinse ve konu boşsa, otomatik konu oluştur
-                if self.continuous_var.get():
-                    self.add_log(_("auto_generating_topic"))
-                    content_language = self.content_language_var.get()
-                    
-                    # Güncel içerik dilini göster
-                    self.add_log(f"Debug: Konu oluşturmada kullanılan dil: {content_language}")
-                    
-                    # İçerik diline göre konu oluştur
-                    if content_language == "en":
+            
+            # Sürekli çalışma modunda ve konu boşsa, otomatik konu oluştur
+            continuous = self.continuous_var.get()
+            if continuous and not topic:
+                self.add_log(_("generating_topic_automatic"))
+                
+                try:
+                    # İçerik dili seçimine göre konuyu oluştur
+                    if self.content_language_var.get() == "en":
                         topic = generate_english_topic(openai_api_key)
-                        self.add_log(f"Debug: İngilizce konu otomatik oluşturuldu")
-                    elif content_language in ["es", "fr", "de", "it", "pt", "ru", "ar"]:
-                        # Uluslararası diller için konu üretici
-                        topic = generate_topic_international(openai_api_key, content_language)
-                        self.add_log(f"Debug: {content_language} dilinde konu otomatik oluşturuldu")
+                    elif self.content_language_var.get() in ['es', 'fr', 'de', 'it', 'pt', 'ru', 'ar', 'zh', 'ja', 'ko']:
+                        # Diğer diller için konu oluşturucu
+                        topic = generate_topic_international(openai_api_key, self.content_language_var.get())
                     else:
                         topic = generate_topic(openai_api_key)
-                        self.add_log(f"Debug: Türkçe konu otomatik oluşturuldu")
-                        
+                    
+                    # Konuyu UI'a ayarla
                     self.topic_var.set(topic)
-                    self.add_log(f"{_('topic')}: {topic}")
-                else:
-                    # Sürekli mod değilse ve konu boşsa, hata ver
-                    self.add_log(_("error_no_topic"))
+                    self.add_log(f"{_('topic_generated')}: {topic}")
+                except Exception as e:
+                    self.add_log(f"{_('error_generating_topic')}: {str(e)}")
                     return
             
+            # Konu hala boş mu kontrol et
+            if not topic:
+                self.add_log(_("error_no_topic"))
+                return
+                
             # Zaten çalışıyor mu kontrol et
             if self.is_running:
                 self.add_log(_("error_already_running"))
@@ -1024,6 +1018,11 @@ class MMotoApp(ctk.CTk):
             # Çalışma modunu al
             continuous = self.continuous_var.get()
             
+            # YouTube'a yükleme seçeneği
+            upload_to_youtube = self.upload_to_youtube_var.get()
+            if not upload_to_youtube:
+                self.add_log("YouTube'a yükleme devre dışı bırakıldı")
+            
             # Yeni bir işlem başlatılıyorsa video sayacını sıfırla
             if not hasattr(self, 'continuing_process') or not self.continuing_process:
                 self.global_video_counter = 0
@@ -1032,38 +1031,52 @@ class MMotoApp(ctk.CTk):
                 # Devam eden bir işlem zinciri olduğunu belirt
                 self.continuing_process = False
                 
-            # Son bir kez dosyadaki içerik dilini kontrol et, farklıysa güncelle
+                # Maksimum video sayısı kontrolü
+                if max_videos is not None and self.global_video_counter >= max_videos:
+                    self.add_log(f"Maksimum video sayısına ({max_videos}) ulaşıldı. İşlem başlatılmıyor.")
+                    # Sürekli çalışma modunu kapat
+                    self.continuous_var.set(False) 
+                    self.add_log("Sürekli çalışma modu otomatik olarak kapatıldı")
+                    return
+            
+            # Config.json'dan API anahtarlarını al ve UI ile karşılaştır
             try:
-                # Config dosyasının güncel olduğundan emin olalım 
-                content_language = self.content_language_var.get()
-                subtitle_language = self.subtitle_language_var.get()
-                self.add_log(f"Debug: Başlatmadan önce içerik dili: {content_language}")
-                self.add_log(f"Debug: Başlatmadan önce altyazı dili: {subtitle_language}")
+                # API anahtarlarını ayarla
+                with open("config.json", "r", encoding="utf-8") as f:
+                    config = json.load(f)
                 
-                if os.path.exists("config.json"):
-                    with open("config.json", "r", encoding="utf-8") as f:
-                        config = json.load(f)
+                # OpenAI API anahtarı
+                if "openai_api_key" in config and config["openai_api_key"] != openai_api_key:
+                    config["openai_api_key"] = openai_api_key
+                    need_save = True
                     
-                    config_changed = False
+                # Pexels API anahtarı
+                pexels_api_key = self.pexels_api_var.get().strip()
+                if "pexels_api_key" in config and config["pexels_api_key"] != pexels_api_key:
+                    config["pexels_api_key"] = pexels_api_key
+                    need_save = True
                     
-                    # İçerik ve TTS dili kontrolü
-                    if config.get("content_language") != content_language or config.get("tts_language") != content_language:
-                        self.add_log(f"Debug: Başlatmadan önce içerik/tts dili config.json güncelleniyor!")
-                        config["content_language"] = content_language
-                        config["tts_language"] = content_language
-                        config_changed = True
-                        
-                    # Altyazı dili kontrolü
-                    if config.get("subtitle_language") != subtitle_language:
-                        self.add_log(f"Debug: Başlatmadan önce altyazı dili config.json güncelleniyor!")
-                        config["subtitle_language"] = subtitle_language
-                        config_changed = True
+                # YouTube API anahtarı
+                youtube_api_key = self.youtube_api_var.get().strip()
+                if "youtube_api_key" in config and config["youtube_api_key"] != youtube_api_key:
+                    config["youtube_api_key"] = youtube_api_key
+                    need_save = True
                     
-                    # Eğer değişiklik varsa dosyayı güncelle
-                    if config_changed:
-                        with open("config.json", "w", encoding="utf-8") as f:
-                            json.dump(config, f, indent=2, ensure_ascii=False)
-                        self.add_log("Debug: Config.json tam eşleşme için güncellendi")
+                # Pixabay API anahtarı
+                pixabay_api_key = self.pixabay_api_var.get().strip()
+                if "pixabay_api_key" in config and config["pixabay_api_key"] != pixabay_api_key:
+                    config["pixabay_api_key"] = pixabay_api_key
+                    need_save = True
+                    
+                # Dil ayarlarını kaydet
+                config["content_language"] = self.content_language_var.get()
+                config["tts_language"] = self.content_language_var.get()  # TTS dili içerik diliyle aynı
+                config["subtitle_language"] = self.subtitle_language_var.get()
+                
+                # Config'i kaydet
+                with open("config.json", "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+                
             except Exception as e:
                 self.add_log(f"Debug: Config son kontrol hatası: {str(e)}")
             
@@ -1076,7 +1089,7 @@ class MMotoApp(ctk.CTk):
             # İşlem threadini başlat
             process_thread = threading.Thread(
                 target=self.run_video_process,
-                args=(topic, continuous, max_videos)
+                args=(topic, continuous, max_videos, upload_to_youtube)
             )
             process_thread.daemon = True
             process_thread.start()
@@ -1096,6 +1109,14 @@ class MMotoApp(ctk.CTk):
                             # OpenAI API anahtarı kontrol et
                             if not openai_api_key:
                                 self.add_log(_("error_no_openai_key"))
+                                return
+                            
+                            # Maksimum video sayısı kontrolü
+                            if max_videos is not None and self.global_video_counter >= max_videos:
+                                self.add_log(f"Maksimum video sayısına ({max_videos}) ulaşıldı. İşlem sonlandırılıyor.")
+                                # Sürekli çalışma modunu kapat
+                                self.continuous_var.set(False)
+                                self.add_log("Sürekli çalışma modu otomatik olarak kapatıldı")
                                 return
                                 
                             # Bir sonraki işlem için boş konu ayarla - otomatik oluşturulacak
@@ -1119,7 +1140,7 @@ class MMotoApp(ctk.CTk):
             self.status_var.set(_("error"))
             self.add_log(f"{_('error_prefix')}{str(e)}")
     
-    def run_video_process(self, topic, continuous, max_videos):
+    def run_video_process(self, topic, continuous, max_videos, upload_to_youtube=True):
         """Video oluşturma işlemini çalıştırır"""
         try:
             # Genel işlem durumu
@@ -1138,17 +1159,20 @@ class MMotoApp(ctk.CTk):
                 else:
                     self.add_log(f"Sınırsız video üretim modu. Şu ana kadar üretilen: {global_video_counter}")
                 
+            # Video limiti kontrolü - sürekli modda ve belirli bir limite ulaşıldıysa
+            if continuous and max_videos is not None and global_video_counter >= max_videos:
+                self.add_log(f"Maksimum video sayısına ({max_videos}) ulaşıldı. İşlem sonlandırılıyor.")
+                self.process_completed()
+                # Sürekli çalışma modunu kapat
+                self.continuous_var.set(False)
+                self.add_log("Sürekli çalışma modu otomatik olarak kapatıldı")
+                return
+            
             # UI güncellemesi yapmak için kullanılacak fonksiyon
             def update_ui(message, is_error=False):
                 self.add_log(message)
                 if is_error:
                     self.status_var.set(_("error"))
-            
-            # Video limiti kontrolü - sürekli modda ve belirli bir limite ulaşıldıysa
-            if continuous and max_videos is not None and global_video_counter >= max_videos:
-                self.add_log(f"Maksimum video sayısına ({max_videos}) ulaşıldı. İşlem sonlandırılıyor.")
-                self.process_completed()
-                return
             
             # API anahtarlarını al
             openai_api_key = self.openai_api_var.get().strip()
@@ -1164,93 +1188,35 @@ class MMotoApp(ctk.CTk):
                 
             # Config.json dosyasından değil, doğrudan StringVar'dan dil bilgilerini al
             # Bu sayede UI'da seçilen dil doğrudan kullanılacak
-            self.add_log(f"Debug: StringVar içerik dili değeri: {self.content_language_var.get()}")
-            self.add_log(f"Debug: StringVar altyazı dili değeri: {self.subtitle_language_var.get()}")
+            self.add_log(f"Ayarlar kontrol ediliyor...")
+            self.add_log(f"İçerik dili: {self.content_language_var.get()}")
+            self.add_log(f"Altyazı dili: {self.subtitle_language_var.get()}")
+            self.add_log(f"YouTube'a yükleme: {'Evet' if upload_to_youtube else 'Hayır'}")
             
             # İçerik ve altyazı dillerini al
             content_language = self.content_language_var.get()
             subtitle_language = self.subtitle_language_var.get()
             
-            # Config.json dosyasındaki değerlerle kontrol et - eşleşmiyorsa güncelle
-            try:
-                with open("config.json", "r", encoding="utf-8") as f:
-                    config = json.load(f)
-                
-                config_content_lang = config.get("content_language", "tr")
-                config_tts_lang = config.get("tts_language", "tr")
-                config_subtitle_lang = config.get("subtitle_language", "tr")
-                
-                # İçerik ve TTS dili kontrolü
-                if config_content_lang != content_language or config_tts_lang != content_language:
-                    self.add_log(f"Debug: Config.json ile içerik dili uyuşmazlığı tespit edildi!")
-                    self.add_log(f"Debug: UI'da: {content_language}, Config'de: {config_content_lang}")
-                    
-                    # Config dosyasını güncelle
-                    config["content_language"] = content_language
-                    config["tts_language"] = content_language
-                    
-                    with open("config.json", "w", encoding="utf-8") as f:
-                        json.dump(config, f, indent=2, ensure_ascii=False)
-                    
-                    self.add_log(f"Debug: Config.json güncellendi, içerik dili: {content_language}")
-                
-                # Altyazı dili kontrolü
-                if config_subtitle_lang != subtitle_language:
-                    self.add_log(f"Debug: Config.json ile altyazı dili uyuşmazlığı tespit edildi!")
-                    self.add_log(f"Debug: UI'da: {subtitle_language}, Config'de: {config_subtitle_lang}")
-                    
-                    # Config dosyasını güncelle
-                    config["subtitle_language"] = subtitle_language
-                    
-                    with open("config.json", "w", encoding="utf-8") as f:
-                        json.dump(config, f, indent=2, ensure_ascii=False)
-                    
-                    self.add_log(f"Debug: Config.json güncellendi, altyazı dili: {subtitle_language}")
-            except Exception as e:
-                self.add_log(f"Debug: Config kontrol hatası: {str(e)}")
-            
-            # Debug: Seçilen dilleri göster
-            self.add_log(f"Debug: İşlemdeki içerik dili: {content_language}")
-            self.add_log(f"Debug: İşlemdeki altyazı dili: {subtitle_language}")
-            
-            # Dil uyumu kontrolü
-            if not content_language:
-                content_language = "tr"  # Varsayılan dil
-                self.add_log(f"{_('warning_default_language')}: {content_language}")
-                
-            if not subtitle_language:
-                subtitle_language = content_language
-                self.add_log(f"{_('warning_subtitle_language_set')}: {subtitle_language}")
-                
-            # Gerekli işlem parametreleri
+            # Parametreleri hazırla
             params = {
                 "topic": topic,
                 "openai_api_key": openai_api_key,
                 "pexels_api_key": pexels_api_key,
                 "pixabay_api_key": pixabay_api_key,
-                "youtube_api_key": youtube_api_key,
-                "language": content_language,      # İçerik dili
-                "tts_language": content_language,  # TTS dili içerik dili ile aynı
-                "subtitle_language": subtitle_language,  # Altyazı dili
+                "youtube_api_key": youtube_api_key if upload_to_youtube else "",  # YouTube'a yükleme seçeneğine göre API key'i geçir
+                "language": content_language,
+                "tts_language": content_language,  # TTS dili içerik diliyle aynı olsun
+                "subtitle_language": subtitle_language,
                 "max_videos": max_videos,
                 "continuous_mode": continuous,
-                "log_callback": update_ui
+                "log_callback": update_ui,
+                "upload_to_youtube": upload_to_youtube  # YouTube'a yükleme seçeneğini ekle
             }
-            
-            # Debug: Parametre olarak geçilen dilleri göster
-            self.add_log(f"Debug: Geçirilecek içerik dili: {params['language']}")
-            self.add_log(f"Debug: Geçirilecek TTS dili: {params['tts_language']}")
-            self.add_log(f"Debug: Geçirilecek altyazı dili: {params['subtitle_language']}")
-            
-            # Log için dil ayarlarını göster
-            self.add_log(f"{_('using_content_and_tts_language')}: {content_language}")
-            self.add_log(f"{_('using_subtitle_language')}: {subtitle_language}")
             
             # İşlemi başlat
             try:
                 # İşlem başlamadan önce son bir kez dil ayarlarını kontrol et
-                self.add_log(f"Debug: Son kontrol - İçerik dili: {params['language']}")
-                self.add_log(f"Debug: Son kontrol - TTS dili: {params['tts_language']}")
+                self.add_log(f"İşlem başlatılıyor...")
                 
                 # Yeni bir asyncio loop oluştur
                 loop = asyncio.new_event_loop()

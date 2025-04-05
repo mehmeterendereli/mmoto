@@ -119,7 +119,10 @@ def extract_keywords_with_openai(sentences: List[str], topic: str, language: str
         "it": "Italian",
         "pt": "Portuguese",
         "ru": "Russian",
-        "ar": "Arabic"
+        "ar": "Arabic",
+        "zh": "Chinese",
+        "ja": "Japanese",
+        "ko": "Korean"
     }
     lang_name = language_names.get(language, "English")
     
@@ -223,6 +226,42 @@ def get_stop_words(language: str) -> List[str]:
             "das", "ein", "eine", "mit", "ohne", "von", "in", "für", 
             "als", "und", "oder", "aber", "weil", "wo", "wann",
             "wer", "was", "dieser", "diese", "dieses"
+        ],
+        "it": [
+            "perché", "come", "è", "sono", "se", "può", "il", "la", "lo", 
+            "i", "gli", "le", "un", "una", "uno", "con", "senza", "di", "in", 
+            "per", "come", "e", "o", "ma", "perché", "dove", "quando",
+            "chi", "che", "questo", "questa", "questi", "queste"
+        ],
+        "pt": [
+            "por que", "como", "é", "são", "se", "pode", "o", "a", 
+            "os", "as", "um", "uma", "uns", "umas", "com", "sem", "de", "em", 
+            "por", "para", "como", "e", "ou", "mas", "porque", "onde", "quando",
+            "quem", "cujo", "cuja", "este", "esta", "estes", "estas"
+        ],
+        "ru": [
+            "почему", "как", "если", "это", "тот", "те", "в", "на", "с", 
+            "из", "для", "о", "об", "и", "или", "но", "потому", "где", "когда",
+            "кто", "что", "этот", "эта", "эти", "который", "которая", "которые"
+        ],
+        "zh": [
+            "为什么", "怎么", "是", "如果", "可以", "的", "在", "和", "或者", 
+            "但是", "因为", "哪里", "什么时候", "谁", "这个", "那个", "这些", "那些"
+        ],
+        "ja": [
+            "なぜ", "どうやって", "です", "ます", "もし", "できる", "の", "に", "で", 
+            "と", "や", "または", "しかし", "だから", "どこ", "いつ",
+            "誰", "何", "この", "その", "これら", "それら"
+        ],
+        "ko": [
+            "왜", "어떻게", "이다", "있다", "만약", "할 수 있다", "의", "에", "에서", 
+            "와", "과", "또는", "하지만", "왜냐하면", "어디", "언제",
+            "누구", "무엇", "이", "그", "이것들", "그것들"
+        ],
+        "ar": [
+            "لماذا", "كيف", "هو", "هي", "إذا", "يمكن", "ال", "من", "إلى", 
+            "مع", "و", "أو", "لكن", "لأن", "أين", "متى",
+            "من", "ما", "هذا", "هذه", "هؤلاء", "أولئك"
         ]
     }
     
