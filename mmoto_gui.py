@@ -566,17 +566,24 @@ class MMotoApp(ctk.CTk):
             # Seçilen dil adından dil kodunu bul
             for code, key in SUPPORTED_LANGUAGES.items():
                 if _(key) == selected_name:
-                    self.ui_language_var.set(code)
-                    self.add_log(f"Arayüz dili değiştirildi: {code} ({selected_name})")
-                    
-                    # Config dosyasına kaydet
-                    try:
-                        config = self.load_config(silent=True)
-                        config["ui_language"] = code
-                        with open("config.json", "w", encoding="utf-8") as f:
-                            json.dump(config, f, indent=2, ensure_ascii=False)
-                    except Exception as save_error:
-                        self.add_log(f"Config kaydetme hatası: {str(save_error)}")
+                    old_code = self.ui_language_var.get()
+                    if old_code != code:
+                        self.ui_language_var.set(code)
+                        self.add_log(f"Arayüz dili değiştirildi: {old_code} -> {code}")
+                        
+                        # Config dosyasına kaydet
+                        try:
+                            # Mevcut config'i değiştir, tekrar yükleme
+                            config = {}
+                            if os.path.exists("config.json"):
+                                with open("config.json", "r", encoding="utf-8") as f:
+                                    config = json.load(f)
+                            
+                            config["ui_language"] = code
+                            with open("config.json", "w", encoding="utf-8") as f:
+                                json.dump(config, f, indent=2, ensure_ascii=False)
+                        except Exception as save_error:
+                            self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
                     break
         except Exception as e:
@@ -590,19 +597,25 @@ class MMotoApp(ctk.CTk):
                 if _(key) == selected_name:
                     # Yeni değeri ayarla
                     old_code = self.content_language_var.get()
-                    self.content_language_var.set(code)
-                    self.add_log(f"İçerik dili değiştirildi: {old_code} -> {code}")
-                    
-                    # Config dosyasına kaydet
-                    try:
-                        config = self.load_config(silent=True)
-                        config["content_language"] = code
-                        config["tts_language"] = code  # TTS dili içerik diliyle aynı
-                        with open("config.json", "w", encoding="utf-8") as f:
-                            json.dump(config, f, indent=2, ensure_ascii=False)
-                        self.add_log(f"İçerik ve TTS dili config.json'a kaydedildi: {code}")
-                    except Exception as save_error:
-                        self.add_log(f"Config kaydetme hatası: {str(save_error)}")
+                    if old_code != code:
+                        self.content_language_var.set(code)
+                        self.add_log(f"İçerik dili değiştirildi: {old_code} -> {code}")
+                        
+                        # Config dosyasına kaydet
+                        try:
+                            # Mevcut config'i değiştir, tekrar yükleme
+                            config = {}
+                            if os.path.exists("config.json"):
+                                with open("config.json", "r", encoding="utf-8") as f:
+                                    config = json.load(f)
+                            
+                            config["content_language"] = code
+                            config["tts_language"] = code  # TTS dili içerik diliyle aynı
+                            with open("config.json", "w", encoding="utf-8") as f:
+                                json.dump(config, f, indent=2, ensure_ascii=False)
+                            self.add_log(f"İçerik ve TTS dili config.json'a kaydedildi: {code}")
+                        except Exception as save_error:
+                            self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
                     break
         except Exception as e:
@@ -616,18 +629,24 @@ class MMotoApp(ctk.CTk):
                 if _(key) == selected_name:
                     # Yeni değeri ayarla
                     old_code = self.subtitle_language_var.get()
-                    self.subtitle_language_var.set(code)
-                    self.add_log(f"Altyazı dili değiştirildi: {old_code} -> {code}")
-                    
-                    # Config dosyasına kaydet
-                    try:
-                        config = self.load_config(silent=True)
-                        config["subtitle_language"] = code
-                        with open("config.json", "w", encoding="utf-8") as f:
-                            json.dump(config, f, indent=2, ensure_ascii=False)
-                        self.add_log(f"Altyazı dili config.json'a kaydedildi: {code}")
-                    except Exception as save_error:
-                        self.add_log(f"Config kaydetme hatası: {str(save_error)}")
+                    if old_code != code:
+                        self.subtitle_language_var.set(code)
+                        self.add_log(f"Altyazı dili değiştirildi: {old_code} -> {code}")
+                        
+                        # Config dosyasına kaydet
+                        try:
+                            # Mevcut config'i değiştir, tekrar yükleme
+                            config = {}
+                            if os.path.exists("config.json"):
+                                with open("config.json", "r", encoding="utf-8") as f:
+                                    config = json.load(f)
+                            
+                            config["subtitle_language"] = code
+                            with open("config.json", "w", encoding="utf-8") as f:
+                                json.dump(config, f, indent=2, ensure_ascii=False)
+                            self.add_log(f"Altyazı dili config.json'a kaydedildi: {code}")
+                        except Exception as save_error:
+                            self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
                     break
         except Exception as e:
@@ -639,6 +658,9 @@ class MMotoApp(ctk.CTk):
             if os.path.exists("config.json"):
                 with open("config.json", "r", encoding="utf-8") as f:
                     config = json.load(f)
+                
+                # Değişiklik kontrolü için flag
+                has_changes = False
                 
                 # API anahtarlarını yükle
                 if "openai_api_key" in config:
@@ -665,23 +687,27 @@ class MMotoApp(ctk.CTk):
                 # Sadece config dosyasındaki değerlerden farklı ise güncelle
                 # Bu, dil değişim döngüsünü önlemek için önemli
                 if not silent:
-                    # UI dil değişkenini güncelle ve arayüzü yenile
+                    # UI dil değişkenini güncelle
                     if ui_lang != self.ui_language_var.get():
                         self.ui_language_var.set(ui_lang)
+                        has_changes = True
                     
                     # İçerik dili değişkenini güncelle
                     if content_lang != self.content_language_var.get():
                         self.content_language_var.set(content_lang)
+                        has_changes = True
                     
                     # Altyazı dili değişkenini güncelle
                     if subtitle_lang != self.subtitle_language_var.get():
                         self.subtitle_language_var.set(subtitle_lang)
-                
-                if not silent:
-                    # Yüklenen değerlerle ilgili mesaj
-                    self.add_log(f"Ayarlar dosyadan yüklendi")
-                    self.add_log(f"Dil ayarları: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
-                    # Arayüz dilini ayarla
+                        has_changes = True
+                    
+                    # Değişiklik olduysa log mesajı ekle
+                    if has_changes:
+                        self.add_log(f"Ayarlar dosyadan yüklendi")
+                        self.add_log(f"Dil ayarları: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
+                        
+                    # Arayüz dilini ayarla (her durumda yapılmalı)
                     language_manager.set_language(self.ui_language_var.get())
                 
                 return config
@@ -856,26 +882,42 @@ class MMotoApp(ctk.CTk):
     def save_settings(self):
         """Ayarları kaydeder"""
         try:
-            # Config dosyasını yükle
-            config = self.load_config()
+            # Güncel ayarları al
+            config = {}
+            if os.path.exists("config.json"):
+                with open("config.json", "r", encoding="utf-8") as f:
+                    config = json.load(f)
             
             # İçerik dili
             content_lang = self.content_language_var.get()
+            ui_lang = self.ui_language_var.get()
+            subtitle_lang = self.subtitle_language_var.get()
+            
+            # Değişiklik yapılacak mı kontrol et
+            has_changes = False
+            if config.get("ui_language") != ui_lang:
+                has_changes = True
+            if config.get("content_language") != content_lang:
+                has_changes = True
+            if config.get("tts_language") != content_lang:
+                has_changes = True  
+            if config.get("subtitle_language") != subtitle_lang:
+                has_changes = True
             
             # Dil ayarlarını kaydet
-            config["ui_language"] = self.ui_language_var.get()
+            config["ui_language"] = ui_lang
             config["content_language"] = content_lang
             config["tts_language"] = content_lang  # İçerik dili ile aynı olmalı
-            config["subtitle_language"] = self.subtitle_language_var.get()
+            config["subtitle_language"] = subtitle_lang
             
-            # Debug
-            self.add_log(f"Debug: Kaydedilen içerik dili: {content_lang}")
-            self.add_log(f"Debug: Kaydedilen tts dili: {content_lang}")
+            # Değişiklik varsa log mesajı
+            if has_changes:
+                self.add_log(f"Dil ayarları güncellendi: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
             
             # Dosyaya yaz
             with open("config.json", "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-                
+            
             # Başarı mesajı
             self.settings_status_var.set(_("settings_saved"))
             self.after(3000, lambda: self.settings_status_var.set(""))
