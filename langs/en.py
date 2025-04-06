@@ -20,6 +20,7 @@ LANG = {
     "generate_topic": "Generate Topic",
     "log_title": "Process Log:",
     "continuous_mode": "Continuous Mode",
+    "upload_to_youtube": "Upload to YouTube?",
     "language": "Language:",
     "turkish": "Turkish",
     "english": "English",

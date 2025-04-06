@@ -304,7 +304,7 @@ class MMotoApp(ctk.CTk):
         # YouTube'a yükleme seçeneği
         self.upload_to_youtube_check = ctk.CTkCheckBox(
             settings_frame, 
-            text="YouTube'a yüklensin mi?", 
+            text=_("upload_to_youtube"), 
             variable=self.upload_to_youtube_var
         )
         self.upload_to_youtube_check.grid(row=0, column=1, padx=5, pady=5, sticky="w")
@@ -464,65 +464,49 @@ class MMotoApp(ctk.CTk):
         settings_content.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
         settings_content.grid_columnconfigure(1, weight=1)
         
+        # Dil seçeneklerini hazırla
+        lang_options = get_language_options(_)
+        lang_values = [name for _, name in lang_options]
+        lang_map = {_(SUPPORTED_LANGUAGES[code]): code for code in SUPPORTED_LANGUAGES}
+        
         # Arayüz dili ayarları
         ui_lang_label = ctk.CTkLabel(settings_content, text=_("ui_language"))
         ui_lang_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
         
         # Arayüz dili dropdown
-        ui_lang_options = get_language_options(_)
-        ui_lang_values = [name for _, name in ui_lang_options]
-        
         self.ui_lang_dropdown = ctk.CTkOptionMenu(
             settings_content,
-            values=ui_lang_values,
+            values=lang_values,
             command=self.on_ui_language_select
         )
         self.ui_lang_dropdown.grid(row=0, column=1, padx=20, pady=15, sticky="w")
         
-        # Başlangıç değerini ayarla
-        current_ui_lang_code = self.ui_language_var.get()
-        current_ui_lang_name = get_language_name(current_ui_lang_code, _)
-        self.ui_lang_dropdown.set(current_ui_lang_name)
-        
-        # İçerik ve seslendirme dili ayarları (birleştirilmiş)
+        # İçerik dili ayarları
         content_lang_label = ctk.CTkLabel(settings_content, text=_("content_and_tts_language"))
         content_lang_label.grid(row=1, column=0, padx=20, pady=15, sticky="w")
         
         # İçerik dili dropdown
-        content_lang_options = get_language_options(_)
-        content_lang_values = [name for _, name in content_lang_options]
-        
         self.content_lang_dropdown = ctk.CTkOptionMenu(
             settings_content,
-            values=content_lang_values,
+            values=lang_values,
             command=self.on_content_language_select
         )
         self.content_lang_dropdown.grid(row=1, column=1, padx=20, pady=15, sticky="w")
-        
-        # Başlangıç değerini ayarla
-        current_content_lang_code = self.content_language_var.get()
-        current_content_lang_name = get_language_name(current_content_lang_code, _)
-        self.content_lang_dropdown.set(current_content_lang_name)
         
         # Altyazı dili ayarları
         subtitle_lang_label = ctk.CTkLabel(settings_content, text=_("subtitle_language"))
         subtitle_lang_label.grid(row=2, column=0, padx=20, pady=15, sticky="w")
         
         # Altyazı dili dropdown
-        subtitle_lang_options = get_language_options(_)
-        subtitle_lang_values = [name for _, name in subtitle_lang_options]
-        
         self.subtitle_lang_dropdown = ctk.CTkOptionMenu(
             settings_content,
-            values=subtitle_lang_values,
+            values=lang_values,
             command=self.on_subtitle_language_select
         )
         self.subtitle_lang_dropdown.grid(row=2, column=1, padx=20, pady=15, sticky="w")
         
-        # Başlangıç değerini ayarla
-        current_subtitle_lang_code = self.subtitle_language_var.get()
-        current_subtitle_lang_name = get_language_name(current_subtitle_lang_code, _)
-        self.subtitle_lang_dropdown.set(current_subtitle_lang_name)
+        # Dropdown'ların başlangıç değerlerini ayarla
+        self.update_language_dropdowns()
         
         # Dil ayarları açıklaması
         content_lang_info = ctk.CTkLabel(
@@ -550,80 +534,94 @@ class MMotoApp(ctk.CTk):
         )
         settings_status.grid(row=3, column=0, padx=20, pady=(10, 0), sticky="w")
     
+    def update_language_dropdowns(self):
+        """Dil dropdown menülerini günceller"""
+        try:
+            # Mevcut seçili dil kodlarını al
+            ui_lang_code = self.ui_language_var.get()
+            content_lang_code = self.content_language_var.get()
+            subtitle_lang_code = self.subtitle_language_var.get()
+            
+            # Dil kodlarından dil adlarını bul
+            ui_lang_name = get_language_name(ui_lang_code, _)
+            content_lang_name = get_language_name(content_lang_code, _)
+            subtitle_lang_name = get_language_name(subtitle_lang_code, _)
+            
+            # Dropdown menüleri güncelle
+            if hasattr(self, 'ui_lang_dropdown'):
+                self.ui_lang_dropdown.set(ui_lang_name)
+                
+            if hasattr(self, 'content_lang_dropdown'):
+                self.content_lang_dropdown.set(content_lang_name)
+                
+            if hasattr(self, 'subtitle_lang_dropdown'):
+                self.subtitle_lang_dropdown.set(subtitle_lang_name)
+                
+        except Exception as e:
+            self.add_log(f"Dil dropdown güncelleme hatası: {str(e)}")
+    
     def on_ui_language_select(self, selected_name):
         """Arayüz dili seçimi değiştiğinde çağrılır"""
-        # Seçilen dil adından dil kodunu bul
-        for code, key in SUPPORTED_LANGUAGES.items():
-            if _(key) == selected_name:
-                self.ui_language_var.set(code)
-                break
+        try:
+            # Seçilen dil adından dil kodunu bul
+            for code, key in SUPPORTED_LANGUAGES.items():
+                if _(key) == selected_name:
+                    self.ui_language_var.set(code)
+                    self.add_log(f"Arayüz dili değiştirildi: {code} ({selected_name})")
+                    
+                    # Config dosyasına kaydet
+                    try:
+                        config = self.load_config(silent=True)
+                        config["ui_language"] = code
+                        with open("config.json", "w", encoding="utf-8") as f:
+                            json.dump(config, f, indent=2, ensure_ascii=False)
+                    except Exception as save_error:
+                        self.add_log(f"Config kaydetme hatası: {str(save_error)}")
+                    
+                    break
+        except Exception as e:
+            self.add_log(f"Dil değiştirme hatası: {str(e)}")
     
     def on_content_language_select(self, selected_name):
         """İçerik dili seçimi değiştiğinde çağrılır"""
         try:
-            # Debug: Şu anki içerik dilini göster
-            current_lang = self.content_language_var.get()
-            self.add_log(f"Debug: Mevcut içerik dili: {current_lang}")
-            
-            # Debug: Seçilen dil adını göster
-            self.add_log(f"Debug: Seçilen dil adı: {selected_name}")
-            
             # Seçilen dil adından dil kodunu bul
-            found = False
             for code, key in SUPPORTED_LANGUAGES.items():
-                translated_name = _(key)
-                # Debug: Kontrol edilen dili göster
-                # self.add_log(f"Debug: Kontrol: {code} -> {key} -> {translated_name}")
-                
-                if translated_name == selected_name:
-                    # Yeni içerik dilini ayarla
+                if _(key) == selected_name:
+                    # Yeni değeri ayarla
+                    old_code = self.content_language_var.get()
                     self.content_language_var.set(code)
-                    # Daha belirgin log mesajı
-                    self.add_log(f"İçerik dili değiştirildi: {code} ({selected_name})")
+                    self.add_log(f"İçerik dili değiştirildi: {old_code} -> {code}")
                     
-                    # Hemen config.json dosyasına da kaydet ki dil değişikliği kalıcı olsun
+                    # Config dosyasına kaydet
                     try:
-                        config = self.load_config()
+                        config = self.load_config(silent=True)
                         config["content_language"] = code
-                        config["tts_language"] = code
+                        config["tts_language"] = code  # TTS dili içerik diliyle aynı
                         with open("config.json", "w", encoding="utf-8") as f:
                             json.dump(config, f, indent=2, ensure_ascii=False)
-                        self.add_log(f"İçerik dili config.json'a kaydedildi: {code}")
+                        self.add_log(f"İçerik ve TTS dili config.json'a kaydedildi: {code}")
                     except Exception as save_error:
                         self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
-                    # Ekranda seçilen dili göster
-                    self.add_log(f"{_('content_and_tts_language_changed')}: {selected_name}")
-                    found = True
                     break
-                    
-            if not found:
-                self.add_log(f"Hata: Dil kodu bulunamadı! Seçilen: {selected_name}")
-                
         except Exception as e:
-            self.add_log(f"{_('error_prefix')}{str(e)}")
+            self.add_log(f"Dil değiştirme hatası: {str(e)}")
     
     def on_subtitle_language_select(self, selected_name):
         """Altyazı dili seçimi değiştiğinde çağrılır"""
         try:
-            # Mevcut altyazı dilini ve seçileni göster
-            current_subtitle_lang = self.subtitle_language_var.get()
-            self.add_log(f"Mevcut altyazı dili: {current_subtitle_lang}")
-            self.add_log(f"Seçilen altyazı dili adı: {selected_name}")
-            
             # Seçilen dil adından dil kodunu bul
-            found = False
             for code, key in SUPPORTED_LANGUAGES.items():
-                translated_name = _(key)
-                if translated_name == selected_name:
-                    # Yeni altyazı dilini ayarla
+                if _(key) == selected_name:
+                    # Yeni değeri ayarla
+                    old_code = self.subtitle_language_var.get()
                     self.subtitle_language_var.set(code)
-                    # Daha belirgin log mesajı
-                    self.add_log(f"Altyazı dili değiştirildi: {code} ({selected_name})")
+                    self.add_log(f"Altyazı dili değiştirildi: {old_code} -> {code}")
                     
-                    # Hemen config.json dosyasına da kaydet
+                    # Config dosyasına kaydet
                     try:
-                        config = self.load_config()
+                        config = self.load_config(silent=True)
                         config["subtitle_language"] = code
                         with open("config.json", "w", encoding="utf-8") as f:
                             json.dump(config, f, indent=2, ensure_ascii=False)
@@ -631,16 +629,70 @@ class MMotoApp(ctk.CTk):
                     except Exception as save_error:
                         self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
-                    # Ekranda seçilen dili göster
-                    self.add_log(f"{_('subtitle_language_changed')}: {selected_name}")
-                    found = True
                     break
-                    
-            if not found:
-                self.add_log(f"Hata: Altyazı dil kodu bulunamadı! Seçilen: {selected_name}")
-                
         except Exception as e:
-            self.add_log(f"{_('error_prefix')}{str(e)}")
+            self.add_log(f"Dil değiştirme hatası: {str(e)}")
+            
+    def load_config(self, silent=False):
+        """API anahtarlarını ve ayarları config.json dosyasından yükler"""
+        try:
+            if os.path.exists("config.json"):
+                with open("config.json", "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                
+                # API anahtarlarını yükle
+                if "openai_api_key" in config:
+                    self.openai_api_var.set(config["openai_api_key"])
+                    
+                if "pexels_api_key" in config:
+                    self.pexels_api_var.set(config["pexels_api_key"])
+                    
+                if "youtube_api_key" in config:
+                    self.youtube_api_var.set(config["youtube_api_key"])
+                    
+                if "pixabay_api_key" in config:
+                    self.pixabay_api_var.set(config["pixabay_api_key"])
+                
+                # YouTube yükleme seçeneği
+                if "upload_to_youtube" in config:
+                    self.upload_to_youtube_var.set(config.get("upload_to_youtube", True))
+                
+                # Dil ayarlarını yükle
+                ui_lang = config.get("ui_language", DEFAULT_UI_LANGUAGE)
+                content_lang = config.get("content_language", DEFAULT_CONTENT_LANGUAGE)
+                subtitle_lang = config.get("subtitle_language", DEFAULT_SUBTITLE_LANGUAGE)
+                
+                # Sadece config dosyasındaki değerlerden farklı ise güncelle
+                # Bu, dil değişim döngüsünü önlemek için önemli
+                if not silent:
+                    # UI dil değişkenini güncelle ve arayüzü yenile
+                    if ui_lang != self.ui_language_var.get():
+                        self.ui_language_var.set(ui_lang)
+                    
+                    # İçerik dili değişkenini güncelle
+                    if content_lang != self.content_language_var.get():
+                        self.content_language_var.set(content_lang)
+                    
+                    # Altyazı dili değişkenini güncelle
+                    if subtitle_lang != self.subtitle_language_var.get():
+                        self.subtitle_language_var.set(subtitle_lang)
+                
+                if not silent:
+                    # Yüklenen değerlerle ilgili mesaj
+                    self.add_log(f"Ayarlar dosyadan yüklendi")
+                    self.add_log(f"Dil ayarları: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
+                    # Arayüz dilini ayarla
+                    language_manager.set_language(self.ui_language_var.get())
+                
+                return config
+            else:
+                if not silent:
+                    self.add_log("Config dosyası bulunamadı, varsayılan değerler kullanılıyor.")
+                return {}
+        except Exception as e:
+            if not silent:
+                self.add_log(f"Config yükleme hatası: {str(e)}")
+            return {}
     
     def on_language_change(self, *args):
         """Dil değiştiğinde UI'ı günceller"""
@@ -673,6 +725,10 @@ class MMotoApp(ctk.CTk):
         self.stop_btn.configure(text=_("stop"))
         self.yt_check_btn.configure(text=_("check_youtube"))
         
+        # YouTube'a yükleme seçeneğini güncelle
+        if hasattr(self, 'upload_to_youtube_check'):
+            self.upload_to_youtube_check.configure(text=_("upload_to_youtube"))
+        
         # API sayfası öğelerini güncelle
         self.api_title_label.configure(text=_("api_title"))
         self.openai_label.configure(text=_("openai_api"))
@@ -688,23 +744,19 @@ class MMotoApp(ctk.CTk):
             lang_options = get_language_options(_)
             lang_values = [name for _, name in lang_options]
             
-            # Mevcut seçili değerleri al
-            ui_lang_code = self.ui_language_var.get()
-            content_lang_code = self.content_language_var.get()
-            subtitle_lang_code = self.subtitle_language_var.get()
-            
-            # Dropdown'ları güncelle
+            # Dropdown'ların değerlerini güncelle
             if hasattr(self, 'ui_lang_dropdown'):
                 self.ui_lang_dropdown.configure(values=lang_values)
-                self.ui_lang_dropdown.set(get_language_name(ui_lang_code, _))
                 
             if hasattr(self, 'content_lang_dropdown'):
                 self.content_lang_dropdown.configure(values=lang_values)
-                self.content_lang_dropdown.set(get_language_name(content_lang_code, _))
                 
             if hasattr(self, 'subtitle_lang_dropdown'):
                 self.subtitle_lang_dropdown.configure(values=lang_values)
-                self.subtitle_lang_dropdown.set(get_language_name(subtitle_lang_code, _))
+                
+            # Update_language_dropdowns fonksiyonu ile seçili değerleri ayarla
+            self.update_language_dropdowns()
+            
         except Exception as e:
             print(f"Error updating language dropdowns: {str(e)}")
     
@@ -801,79 +853,6 @@ class MMotoApp(ctk.CTk):
         """Güncel zamanı formatlar"""
         return datetime.now().strftime("%H:%M:%S")
 
-    def load_config(self, silent=False):
-        """API anahtarlarını ve ayarları config.json dosyasından yükler"""
-        try:
-            # Config dosyası var mı kontrol et
-            if os.path.exists("config.json"):
-                with open("config.json", "r", encoding="utf-8") as f:
-                    config = json.load(f)
-                    
-                # API anahtarlarını yükle
-                self.openai_api_var.set(config.get("openai_api_key", ""))
-                self.pexels_api_var.set(config.get("pexels_api_key", ""))
-                self.youtube_api_var.set(config.get("youtube_api_key", ""))
-                self.pixabay_api_var.set(config.get("pixabay_api_key", ""))
-                
-                # Dil ayarlarını yükle
-                ui_lang = config.get("ui_language", DEFAULT_UI_LANGUAGE)
-                content_lang = config.get("content_language", DEFAULT_CONTENT_LANGUAGE)
-                subtitle_lang = config.get("subtitle_language", DEFAULT_SUBTITLE_LANGUAGE)
-                
-                # Mevcut değerlerle config'deki değerler farklıysa güncelle
-                config_changed = False
-                
-                # İçerik dili kontrolü
-                if content_lang != self.content_language_var.get():
-                    self.add_log(f"Debug: İçerik dili çakışması: UI'da {self.content_language_var.get()}, Config'de {content_lang}")
-                    self.content_language_var.set(content_lang)
-                    config_changed = True
-                    self.add_log(f"Debug: İçerik dili UI değerine göre güncellendi: {content_lang}")
-                
-                # Altyazı dili kontrolü
-                if subtitle_lang != self.subtitle_language_var.get():
-                    self.add_log(f"Debug: Altyazı dili çakışması: UI'da {self.subtitle_language_var.get()}, Config'de {subtitle_lang}")
-                    self.subtitle_language_var.set(subtitle_lang)
-                    config_changed = True
-                    self.add_log(f"Debug: Altyazı dili UI değerine göre güncellendi: {subtitle_lang}")
-                
-                # Eğer değişiklik varsa config dosyasını kaydet
-                if config_changed:
-                    with open("config.json", "w", encoding="utf-8") as f:
-                        json.dump(config, f, indent=2, ensure_ascii=False)
-                    self.add_log(f"Debug: Config dosyası UI değerlerine göre güncellendi")
-                
-                # Dilleri ayarla
-                self.ui_language_var.set(ui_lang)
-                
-                # Yüklenen değerlerle ilgili debug mesajı
-                self.add_log(f"Debug: Yüklenen dil ayarları: UI={ui_lang}, Content={content_lang}, Subtitle={subtitle_lang}")
-                print(f"Yüklenen dil ayarları: UI={ui_lang}, Content={content_lang}, Subtitle={subtitle_lang}")
-                
-                # Arayüz dilini ayarla
-                language_manager.set_language(self.ui_language_var.get())
-                
-                return config
-            else:
-                # Config dosyası yoksa oluştur
-                config = {
-                    "openai_api_key": "",
-                    "pexels_api_key": "",
-                    "youtube_api_key": "",
-                    "pixabay_api_key": "",
-                    "ui_language": DEFAULT_UI_LANGUAGE,
-                    "content_language": DEFAULT_CONTENT_LANGUAGE,
-                    "tts_language": DEFAULT_CONTENT_LANGUAGE,  # Artık content_language ile aynı
-                    "subtitle_language": DEFAULT_SUBTITLE_LANGUAGE
-                }
-                with open("config.json", "w", encoding="utf-8") as f:
-                    json.dump(config, f, indent=2, ensure_ascii=False)
-                return config
-                
-        except Exception as e:
-            self.add_log(f"{_('error_prefix')}{str(e)}")
-            return {}
-            
     def save_settings(self):
         """Ayarları kaydeder"""
         try:

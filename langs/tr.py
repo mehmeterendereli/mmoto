@@ -20,6 +20,7 @@ LANG = {
     "generate_topic": "Konu Oluştur",
     "log_title": "İşlem Günlüğü:",
     "continuous_mode": "Sürekli Çalışma Modu",
+    "upload_to_youtube": "YouTube'a yüklensin mi?",
     "language": "Dil:",
     "turkish": "Türkçe",
     "english": "İngilizce",
