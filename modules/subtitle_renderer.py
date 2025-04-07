@@ -122,7 +122,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_name},60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,6,0,2,10,10,138,1
+Style: Default,{font_name},60,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,1,2,10,10,60,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -166,28 +166,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     if i < len(audio_durations):
                         cumulative_time += audio_durations[i] + 0.05  # 0.05 saniye boşluk (daha az)
             
-            # Her kelime için ASS olayı ekle
+            # Her kelime için tek tek ASS olayı ekle
             for i, word in enumerate(all_words):
                 start_time = format_ass_time(word["start"])
-                
-                # Her kelimenin kendi zamanlamasını kullan, çok küçük bir boşluk bırak
-                # Bu, senkronizasyonu daha doğru hale getirir
-                if i < len(all_words) - 1:
-                    # Bir sonraki kelimeyle çakışmayı önle, ama çok küçük bir boşluk bırak
-                    next_start = all_words[i+1]["start"]
-                    # Kelimenin kendi bitiş zamanını kullan, ama bir sonraki kelimenin başlangıcını geçme
-                    end_time = format_ass_time(min(word["end"] + 0.02, next_start - 0.01))
-                else:
-                    # Son kelime için normal bitiş zamanı + küçük bir boşluk
-                    end_time = format_ass_time(word["end"] + 0.02)
+                end_time = format_ass_time(word["end"])
                 
                 text = word["word"]
                 
                 # Özel karakterleri escape et
                 text = text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
                 
-                # ASS olayı ekle - alt-ortada göster (alignment=7)
-                f.write(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n")
+                # ASS olay satırına özel efektler ekle
+                # \fad(100,100) - kelimenin yavaşça belirip kaybolması için
+                # \bord4 - kenarlık kalınlığı
+                # \shad1 - gölge
+                # \fs60 - yazı boyutu
+                
+                # ASS olayı ekle - ekranın ortasında göster (alignment=2)
+                f.write(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{{\\fad(80,80)\\bord4\\shad1\\fs60}}{text}\n")
         
         return True
     except Exception as e:
@@ -494,21 +490,84 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                 with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
                     log_file.write(f"Kelime seviyesinde ASS dosyası oluşturuldu: {ass_path}\n\n")
                 
-                # ASS dosyasını kullanarak altyazı ekle
-                ass_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "ass={ass_path.replace("\\", "/")}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+                # Windows için yol formatını düzelt
+                # C: yollarında sıkıntı var, file: protokolünü kullanmalıyız
+                fixed_ass_path = ass_path.replace("\\", "/")
+                # C: benzeri sürücü harfi varsa düzgün formata çevir
+                if ":" in fixed_ass_path:
+                    drive_letter = fixed_ass_path[0]
+                    fixed_ass_path = f"file:{fixed_ass_path}"
+                
+                # Alternatif birkaç komutu deneyelim
+                
+                # İlk alternatif - libass kullanarak
+                alt_cmd1 = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -c:v libx264 -c:a copy -vf "subtitles={fixed_ass_path}:fontsdir={os.path.dirname(font_path).replace("\\", "/")}" "{os.path.abspath(subtitled_video)}"'
+                
+                # İkinci alternatif - mutlak değil göreli yol kullanarak
+                rel_ass_path = os.path.basename(ass_path)
+                working_dir = os.path.dirname(ass_path)
+                alt_cmd2 = f'cd "{working_dir}" && "{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "ass={rel_ass_path}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+                
+                # Üçüncü alternatif - basit text overlay olarak
+                alt_cmd3 = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -filter_complex "subtitles={fixed_ass_path}" -c:a copy "{os.path.abspath(subtitled_video)}"'
                 
                 with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("--- ASS Altyazı Komutu ---\n")
-                    log_file.write(f"{ass_subtitle_cmd}\n\n")
+                    log_file.write("--- Alternatif ASS Altyazı Komutları ---\n")
+                    log_file.write(f"Alternatif 1: {alt_cmd1}\n\n")
+                    log_file.write(f"Alternatif 2: {alt_cmd2}\n\n")
+                    log_file.write(f"Alternatif 3: {alt_cmd3}\n\n")
                 
-                print("ASS altyazı komutu çalıştırılıyor...")
+                # İlk yöntemi dene - libass ile
+                print("ASS altyazılar libass ile ekleniyor...")
+                try:
+                    alt_result1 = subprocess.run(alt_cmd1, shell=True, capture_output=True, text=True)
+                    
+                    # Başarılı olup olmadığını kontrol et
+                    if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                        print(f"ASS altyazılar başarıyla eklendi (libass): {subtitled_video}")
+                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                            log_file.write("Alternatif 1 (libass) başarılı!\n\n")
+                        return subtitled_video
+                except Exception as e:
+                    print(f"Alternatif 1 hatası: {str(e)}")
+                
+                # İkinci yöntemi dene - göreli yol ile
+                print("ASS altyazılar göreli yol ile ekleniyor...")
+                try:
+                    alt_result2 = subprocess.run(alt_cmd2, shell=True, capture_output=True, text=True)
+                    
+                    # Başarılı olup olmadığını kontrol et
+                    if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                        print(f"ASS altyazılar başarıyla eklendi (göreli yol): {subtitled_video}")
+                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                            log_file.write("Alternatif 2 (göreli yol) başarılı!\n\n")
+                        return subtitled_video
+                except Exception as e:
+                    print(f"Alternatif 2 hatası: {str(e)}")
+                
+                # Üçüncü yöntemi dene - filter_complex ile
+                print("ASS altyazılar filter_complex ile ekleniyor...")
+                try:
+                    alt_result3 = subprocess.run(alt_cmd3, shell=True, capture_output=True, text=True)
+                    
+                    # Başarılı olup olmadığını kontrol et
+                    if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                        print(f"ASS altyazılar başarıyla eklendi (filter_complex): {subtitled_video}")
+                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                            log_file.write("Alternatif 3 (filter_complex) başarılı!\n\n")
+                        return subtitled_video
+                except Exception as e:
+                    print(f"Alternatif 3 hatası: {str(e)}")
                 
                 try:
-                    ass_result = subprocess.run(ass_subtitle_cmd, shell=True, capture_output=True, text=True)
+                    # Orijinal komutu dene (hepsi başarısız olduysa)
+                    ass_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "ass={fixed_ass_path}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+                    
                     with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write("ASS komut çıktısı:\n")
-                        log_file.write(f"STDOUT: {ass_result.stdout}\n")
-                        log_file.write(f"STDERR: {ass_result.stderr}\n\n")
+                        log_file.write("--- Düzeltilmiş ASS Altyazı Komutu ---\n")
+                        log_file.write(f"{ass_subtitle_cmd}\n\n")
+                    
+                    ass_result = subprocess.run(ass_subtitle_cmd, shell=True, capture_output=True, text=True)
                     
                     # Başarılı olup olmadığını kontrol et
                     if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
@@ -521,14 +580,10 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
                         with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
                             log_file.write("ASS altyazı ekleme başarısız oldu, SRT yöntemi deneniyor...\n\n")
                 except Exception as e:
-                    print(f"ASS altyazı hatası: {str(e)}")
+                    print(f"ASS altyazı son hatası: {str(e)}")
                     with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write(f"ASS altyazı hatası: {str(e)}\n")
+                        log_file.write(f"ASS altyazı son hatası: {str(e)}\n")
                         log_file.write("SRT yöntemi deneniyor...\n\n")
-            else:
-                # ASS oluşturma başarısız olduysa SRT yöntemini dene
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("ASS dosyası oluşturma başarısız oldu, SRT yöntemi deneniyor...\n\n")
             
             # ASS başarısız olduysa veya oluşturulamadıysa, SRT ile devam et
             # Kelime seviyesinde SRT oluştur
@@ -639,140 +694,221 @@ def render_subtitles(video_path: str, sentences: List[str], font_path: str, proj
         print("SRT altyazı komutu çalıştırılıyor...")
         
         try:
-            srt_result = subprocess.run(srt_subtitle_cmd, shell=True, capture_output=True, text=True)
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write("SRT komut çıktısı:\n")
-                log_file.write(f"STDOUT: {srt_result.stdout}\n")
-                log_file.write(f"STDERR: {srt_result.stderr}\n\n")
+            # Windows için yol formatını düzelt
+            fixed_srt_path = srt_path.replace("\\", "/")
+            # C: benzeri sürücü harfi varsa düzgün formata çevir
+            if ":" in fixed_srt_path:
+                fixed_srt_path = f"file:{fixed_srt_path}"
             
-            # Başarılı olup olmadığını kontrol et
-            if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
-                print(f"SRT altyazılar başarıyla eklendi: {subtitled_video}")
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("SRT altyazı ekleme başarılı!\n\n")
-                return subtitled_video
-            else:
-                # SRT başarısız olduysa drawtext yöntemini dene
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("SRT altyazı ekleme başarısız oldu, drawtext yöntemi deneniyor...\n\n")
+            # Alternatif birkaç komutu deneyelim
+            
+            # İlk alternatif - libass kullanarak
+            alt_cmd1 = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -c:v libx264 -c:a copy -vf "subtitles={fixed_srt_path}" "{os.path.abspath(subtitled_video)}"'
+            
+            # İkinci alternatif - mutlak değil göreli yol kullanarak
+            rel_srt_path = os.path.basename(srt_path)
+            working_dir = os.path.dirname(srt_path)
+            alt_cmd2 = f'cd "{working_dir}" && "{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "subtitles={rel_srt_path}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+            
+            # Üçüncü alternatif - filter_complex ile
+            alt_cmd3 = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -filter_complex "subtitles={fixed_srt_path}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+            
+            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                log_file.write("--- Alternatif SRT Altyazı Komutları ---\n")
+                log_file.write(f"Alternatif 1: {alt_cmd1}\n\n")
+                log_file.write(f"Alternatif 2: {alt_cmd2}\n\n")
+                log_file.write(f"Alternatif 3: {alt_cmd3}\n\n")
+            
+            # İlk yöntemi dene - libass ile
+            print("SRT altyazılar libass ile ekleniyor...")
+            try:
+                alt_result1 = subprocess.run(alt_cmd1, shell=True, capture_output=True, text=True)
                 
-                # drawtext yöntemi - altyazıları iki yarıya bölerek ekle
-                filter_texts = []
-                current_time = 0
+                # Başarılı olup olmadığını kontrol et
+                if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                    print(f"SRT altyazılar başarıyla eklendi (libass): {subtitled_video}")
+                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                        log_file.write("Alternatif 1 (libass) başarılı!\n\n")
+                    return subtitled_video
+            except Exception as e:
+                print(f"Alternatif 1 hatası: {str(e)}")
+            
+            # İkinci yöntemi dene - göreli yol ile
+            print("SRT altyazılar göreli yol ile ekleniyor...")
+            try:
+                alt_result2 = subprocess.run(alt_cmd2, shell=True, capture_output=True, text=True)
                 
-                # Güvenli font yolu 
-                if font_path and os.path.exists(font_path):
-                    # Mutlak yol kullan ve tüm \ karakterlerini \\ yap
-                    safe_font_path = font_path.replace('\\', '\\\\')
-                    # Windows yollarında : karakteri var, bunları da kaçış karakteri ekleyelim
-                    if ':' in safe_font_path:
-                        safe_font_path = safe_font_path.replace(':', '\\:')
-                    font_param = f"fontfile='{safe_font_path}':"
+                # Başarılı olup olmadığını kontrol et
+                if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                    print(f"SRT altyazılar başarıyla eklendi (göreli yol): {subtitled_video}")
+                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                        log_file.write("Alternatif 2 (göreli yol) başarılı!\n\n")
+                    return subtitled_video
+            except Exception as e:
+                print(f"Alternatif 2 hatası: {str(e)}")
+            
+            # Üçüncü yöntemi dene - filter_complex ile
+            print("SRT altyazılar filter_complex ile ekleniyor...")
+            try:
+                alt_result3 = subprocess.run(alt_cmd3, shell=True, capture_output=True, text=True)
+                
+                # Başarılı olup olmadığını kontrol et
+                if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                    print(f"SRT altyazılar başarıyla eklendi (filter_complex): {subtitled_video}")
+                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                        log_file.write("Alternatif 3 (filter_complex) başarılı!\n\n")
+                    return subtitled_video
+            except Exception as e:
+                print(f"Alternatif 3 hatası: {str(e)}")
+            
+            # Orijinal komutu dene (hepsi başarısız olduysa)
+            srt_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "subtitles={fixed_srt_path}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+            
+            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                log_file.write("--- Düzeltilmiş SRT Altyazı Komutu ---\n")
+                log_file.write(f"{srt_subtitle_cmd}\n\n")
+                
+            try:
+                srt_result = subprocess.run(srt_subtitle_cmd, shell=True, capture_output=True, text=True)
+                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                    log_file.write("SRT komut çıktısı:\n")
+                    log_file.write(f"STDOUT: {srt_result.stdout}\n")
+                    log_file.write(f"STDERR: {srt_result.stderr}\n\n")
+                
+                # Başarılı olup olmadığını kontrol et
+                if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                    print(f"SRT altyazılar başarıyla eklendi: {subtitled_video}")
+                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                        log_file.write("SRT altyazı ekleme başarılı!\n\n")
+                    return subtitled_video
                 else:
-                    font_param = ""
+                    # SRT başarısız olduysa drawtext yöntemini dene
+                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                        log_file.write("SRT altyazı ekleme başarısız oldu, drawtext yöntemi deneniyor...\n\n")
+            except Exception as e:
+                print(f"SRT altyazı son hatası: {str(e)}")
+                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                    log_file.write(f"SRT altyazı son hatası: {str(e)}\n")
+                    log_file.write("Drawtext yöntemi deneniyor...\n\n")
                 
-                for i, sentence in enumerate(translated_sentences):
-                    # Zamanlamayı ses dosyalarına göre hesapla
-                    if i < len(audio_durations):
-                        total_duration = audio_durations[i]
-                        first_half_start = current_time
-                        first_half_end = current_time + (total_duration / 2)
-                        second_half_start = first_half_end
-                        second_half_end = current_time + total_duration
-                        current_time = second_half_end + 0.1  # Küçük bir boşluk ekle
-                    else:
-                        total_duration = duration / max(1, len(translated_sentences))
-                        first_half_start = i * total_duration
-                        first_half_end = first_half_start + (total_duration / 2)
-                        second_half_start = first_half_end
-                        second_half_end = (i + 1) * total_duration
-                    
-                    # Cümleyi daha anlamlı bir şekilde böl
-                    sentence = sentence.strip()
-                    
-                    # Noktalama işaretlerini kontrol et (virgül, noktalı virgül, iki nokta)
-                    punctuation_marks = [',', ';', ':']
-                    best_split_point = -1
-                    
-                    # Cümlenin ortasına yakın bir noktalama işareti bul
-                    sentence_length = len(sentence)
-                    mid_point = sentence_length // 2
-                    
-                    # Ortaya en yakın noktalama işaretini bul
+            # Buraya kadar geldiyse, drawtext yöntemini dene
+            # drawtext yöntemi - altyazıları iki yarıya bölerek ekle
+            filter_texts = []
+            current_time = 0
+            
+            # Güvenli font yolu 
+            if font_path and os.path.exists(font_path):
+                # Mutlak yol kullan ve tüm \ karakterlerini \\ yap
+                safe_font_path = font_path.replace('\\', '\\\\')
+                # Windows yollarında : karakteri var, bunları da kaçış karakteri ekleyelim
+                if ':' in safe_font_path:
+                    safe_font_path = safe_font_path.replace(':', '\\:')
+                font_param = f"fontfile='{safe_font_path}':"
+            else:
+                font_param = ""
+            
+            for i, sentence in enumerate(translated_sentences):
+                # Zamanlamayı ses dosyalarına göre hesapla
+                if i < len(audio_durations):
+                    total_duration = audio_durations[i]
+                    first_half_start = current_time
+                    first_half_end = current_time + (total_duration / 2)
+                    second_half_start = first_half_end
+                    second_half_end = current_time + total_duration
+                    current_time = second_half_end + 0.1  # Küçük bir boşluk ekle
+                else:
+                    total_duration = duration / max(1, len(translated_sentences))
+                    first_half_start = i * total_duration
+                    first_half_end = first_half_start + (total_duration / 2)
+                    second_half_start = first_half_end
+                    second_half_end = (i + 1) * total_duration
+                
+                # Cümleyi daha anlamlı bir şekilde böl
+                sentence = sentence.strip()
+                
+                # Noktalama işaretlerini kontrol et (virgül, noktalı virgül, iki nokta)
+                punctuation_marks = [',', ';', ':']
+                best_split_point = -1
+                
+                # Cümlenin ortasına yakın bir noktalama işareti bul
+                sentence_length = len(sentence)
+                mid_point = sentence_length // 2
+                
+                # Ortaya en yakın noktalama işaretini bul
+                min_distance = sentence_length
+                for idx, char in enumerate(sentence):
+                    if char in punctuation_marks:
+                        distance = abs(idx - mid_point)
+                        if distance < min_distance:
+                            min_distance = distance
+                            best_split_point = idx + 1  # Noktalama işaretinden sonra böl
+                
+                # Eğer uygun noktalama işareti bulunamazsa, en yakın boşluğu bul
+                if best_split_point == -1:
                     min_distance = sentence_length
                     for idx, char in enumerate(sentence):
-                        if char in punctuation_marks:
+                        if char == ' ':
                             distance = abs(idx - mid_point)
                             if distance < min_distance:
                                 min_distance = distance
-                                best_split_point = idx + 1  # Noktalama işaretinden sonra böl
-                    
-                    # Eğer uygun noktalama işareti bulunamazsa, en yakın boşluğu bul
-                    if best_split_point == -1:
-                        min_distance = sentence_length
-                        for idx, char in enumerate(sentence):
-                            if char == ' ':
-                                distance = abs(idx - mid_point)
-                                if distance < min_distance:
-                                    min_distance = distance
-                                    best_split_point = idx
-                    
-                    # Hala bölme noktası bulunamadıysa, ortadan böl
-                    if best_split_point == -1:
-                        best_split_point = mid_point
-                    
-                    first_half = sentence[:best_split_point].strip()
-                    second_half = sentence[best_split_point:].strip()
-                    
-                    # Özel karakterleri temizle
-                    first_half = first_half.replace("'", "").replace('"', "").replace(':', "").replace('\\', "")
-                    second_half = second_half.replace("'", "").replace('"', "").replace(':', "").replace('\\', "")
-                    
-                    # İlk yarı için filtre ekle
-                    filter_text = f"drawtext={font_param}fontsize=45:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=10:x=(w-text_w)/2:y=h*0.75:text='{first_half}':enable='between(t,{first_half_start},{first_half_end})'"
-                    filter_texts.append(filter_text)
-                    
-                    # İkinci yarı için filtre ekle
-                    filter_text = f"drawtext={font_param}fontsize=45:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=10:x=(w-text_w)/2:y=h*0.75:text='{second_half}':enable='between(t,{second_half_start},{second_half_end})'"
-                    filter_texts.append(filter_text)
+                                best_split_point = idx
                 
-                # Tüm filtreleri birleştir
-                all_filters = ",".join(filter_texts)
+                # Hala bölme noktası bulunamadıysa, ortadan böl
+                if best_split_point == -1:
+                    best_split_point = mid_point
                 
-                # FFmpeg komutunu hazırla ve çalıştır
-                subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "{all_filters}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+                first_half = sentence[:best_split_point].strip()
+                second_half = sentence[best_split_point:].strip()
                 
+                # Özel karakterleri temizle
+                first_half = first_half.replace("'", "").replace('"', "").replace(':', "").replace('\\', "")
+                second_half = second_half.replace("'", "").replace('"', "").replace(':', "").replace('\\', "")
+                
+                # İlk yarı için filtre ekle
+                filter_text = f"drawtext={font_param}fontsize=45:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=10:x=(w-text_w)/2:y=h*0.75:text='{first_half}':enable='between(t,{first_half_start},{first_half_end})'"
+                filter_texts.append(filter_text)
+                
+                # İkinci yarı için filtre ekle
+                filter_text = f"drawtext={font_param}fontsize=45:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=10:x=(w-text_w)/2:y=h*0.75:text='{second_half}':enable='between(t,{second_half_start},{second_half_end})'"
+                filter_texts.append(filter_text)
+            
+            # Tüm filtreleri birleştir
+            all_filters = ",".join(filter_texts)
+            
+            # FFmpeg komutunu hazırla ve çalıştır
+            subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "{all_filters}" -c:a copy "{os.path.abspath(subtitled_video)}"'
+            
+            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
+                log_file.write("--- Drawtext Altyazı Komutu ---\n")
+                log_file.write(f"{subtitle_cmd}\n\n")
+            
+            print("Drawtext altyazı komutu çalıştırılıyor...")
+            
+            try:
+                result = subprocess.run(subtitle_cmd, shell=True, capture_output=True, text=True)
                 with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("--- Drawtext Altyazı Komutu ---\n")
-                    log_file.write(f"{subtitle_cmd}\n\n")
+                    log_file.write("Drawtext komut çıktısı:\n")
+                    log_file.write(f"STDOUT: {result.stdout}\n")
+                    log_file.write(f"STDERR: {result.stderr}\n\n")
                 
-                print("Drawtext altyazı komutu çalıştırılıyor...")
-                
-                try:
-                    result = subprocess.run(subtitle_cmd, shell=True, capture_output=True, text=True)
+                # Başarılı olup olmadığını kontrol et
+                if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
+                    print(f"Drawtext altyazılar başarıyla eklendi: {subtitled_video}")
                     with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write("Drawtext komut çıktısı:\n")
-                        log_file.write(f"STDOUT: {result.stdout}\n")
-                        log_file.write(f"STDERR: {result.stderr}\n\n")
-                    
-                    # Başarılı olup olmadığını kontrol et
-                    if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
-                        print(f"Drawtext altyazılar başarıyla eklendi: {subtitled_video}")
-                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                            log_file.write("Drawtext altyazı ekleme başarılı!\n\n")
-                        return subtitled_video
-                    else:
-                        # Son çare: orijinal videoyu kopyala
-                        print("Altyazı eklenemedi, orijinal video kopyalanıyor...")
-                        shutil.copy2(video_path, subtitled_video)
-                        return subtitled_video
-                        
-                except Exception as e:
-                    print(f"Drawtext altyazı hatası: {str(e)}")
+                        log_file.write("Drawtext altyazı ekleme başarılı!\n\n")
+                    return subtitled_video
+                else:
                     # Son çare: orijinal videoyu kopyala
+                    print("Altyazı eklenemedi, orijinal video kopyalanıyor...")
                     shutil.copy2(video_path, subtitled_video)
                     return subtitled_video
-                
+                    
+            except Exception as e:
+                print(f"Drawtext altyazı hatası: {str(e)}")
+                # Son çare: orijinal videoyu kopyala
+                shutil.copy2(video_path, subtitled_video)
+                return subtitled_video
+            
         except Exception as e:
             print(f"SRT altyazı hatası: {str(e)}")
             # Orijinal videoyu kopyala
@@ -926,127 +1062,50 @@ def create_word_level_srt(sentences: List[str], timings: List[Dict[str, Any]], o
         with open(output_path, "w", encoding="utf-8") as f:
             subtitle_index = 1
             cumulative_time = 0.0  # Kümülatif zaman
-            last_subtitle_end = 0.0  # Son altyazının bitiş zamanı
             
-            # Önce ses dosyalarının sürelerini hesapla
+            # Tüm kelimeleri topla
+            all_words = []
+            
+            # Ses dosyalarının gerçek sürelerini hesapla
             audio_durations = []
             for timing_data in timings:
-                if "words" not in timing_data or not timing_data["words"]:
-                    audio_durations.append(0.0)
-                    continue
-                
-                words = timing_data["words"]
-                if not words:
-                    audio_durations.append(0.0)
-                    continue
-                
-                # Son kelimenin bitiş zamanını al
-                last_word = words[-1]
-                if "end" in last_word:
-                    audio_durations.append(last_word["end"])
+                if "words" in timing_data and timing_data["words"] and len(timing_data["words"]) > 0:
+                    last_word = timing_data["words"][-1]
+                    if "end" in last_word:
+                        audio_durations.append(last_word["end"])
+                    else:
+                        audio_durations.append(0.0)
                 else:
                     audio_durations.append(0.0)
             
-            # Her ses dosyası için altyazıları oluştur
+            # Her ses dosyası için kelimeleri ekle
             for i, timing_data in enumerate(timings):
-                if "words" not in timing_data or not timing_data["words"]:
-                    cumulative_time += audio_durations[i] + 0.2  # Ses dosyası arasında boşluk bırak (0.2 saniye)
-                    continue
+                if "words" in timing_data and timing_data["words"]:
+                    for word_info in timing_data["words"]:
+                        if "word" in word_info and "start" in word_info and "end" in word_info:
+                            # Kelime bilgisini kopyala ve kümülatif zamanı ekle
+                            adjusted_word = {
+                                "word": word_info["word"].strip(),
+                                "start": word_info["start"] + cumulative_time,
+                                "end": word_info["end"] + cumulative_time
+                            }
+                            all_words.append(adjusted_word)
+                    
+                    # Bir sonraki ses dosyası için kümülatif zamanı güncelle
+                    if i < len(audio_durations):
+                        cumulative_time += audio_durations[i] + 0.05  # 0.05 saniye boşluk (daha az)
+            
+            # Her kelime için tek bir SRT girişi oluştur
+            for word in all_words:
+                start_time = format_srt_time(word["start"])
+                end_time = format_srt_time(word["end"])
                 
-                words = timing_data["words"]
-                if not words:
-                    cumulative_time += audio_durations[i] + 0.2
-                    continue
+                # SRT girişi ekle
+                f.write(f"{subtitle_index}\n")
+                f.write(f"{start_time} --> {end_time}\n")
+                f.write(f"{word['word']}\n\n")
                 
-                # Cümle başlangıç ve bitiş zamanlarını belirle
-                sentence_start = words[0]["start"] + cumulative_time if "start" in words[0] else cumulative_time
-                sentence_end = words[-1]["end"] + cumulative_time if "end" in words[-1] else cumulative_time + audio_durations[i]
-                
-                # Kelimeleri daha akıllı bir şekilde grupla
-                word_groups = []
-                current_group = []
-                current_group_word_count = 0
-                max_words_per_group = 7  # Bir grupta maksimum kelime sayısı
-                
-                # Noktalama işaretleri ve bağlaçlar
-                end_punctuation = ['.', '!', '?']  # Cümle sonu noktalama işaretleri
-                mid_punctuation = [',', ';', ':']  # Cümle içi noktalama işaretleri
-                conjunctions = ["ve", "veya", "ile", "ya", "ama", "fakat", "ancak", "çünkü", "bu", "şu", "o"]  # Bağlaçlar
-                
-                for j, word_info in enumerate(words):
-                    if "word" not in word_info or "start" not in word_info or "end" not in word_info:
-                        continue
-                    
-                    # Kelime bilgisini kopyala ve kümülatif zamanı ekle
-                    adjusted_word_info = word_info.copy()
-                    adjusted_word_info["start"] = word_info["start"] + cumulative_time
-                    adjusted_word_info["end"] = word_info["end"] + cumulative_time
-                    
-                    # Kelimeyi gruba ekle
-                    current_group.append(adjusted_word_info)
-                    current_group_word_count += 1
-                    
-                    # Grup sonlandırma koşulları
-                    word = word_info["word"].strip()
-                    is_last_word = j == len(words) - 1
-                    
-                    # Cümle sonu noktalama işaretlerinde her zaman grup sonlandır
-                    if any(word.endswith(p) for p in end_punctuation) or is_last_word:
-                        word_groups.append(current_group)
-                        current_group = []
-                        current_group_word_count = 0
-                    # Cümle içi noktalama işaretlerinde, grup yeterince uzunsa sonlandır
-                    elif any(word.endswith(p) for p in mid_punctuation) and current_group_word_count >= 3:
-                        word_groups.append(current_group)
-                        current_group = []
-                        current_group_word_count = 0
-                    # Maksimum kelime sayısına ulaşıldıysa ve sonraki kelime bağlaç değilse grup sonlandır
-                    elif current_group_word_count >= max_words_per_group:
-                        # Sonraki kelimeye bak
-                        if j + 1 < len(words) and words[j + 1]["word"].strip().lower() not in conjunctions:
-                            word_groups.append(current_group)
-                            current_group = []
-                            current_group_word_count = 0
-                
-                # Son grubu ekle
-                if current_group:
-                    word_groups.append(current_group)
-                
-                # Her grup için altyazı oluştur
-                for group in word_groups:
-                    if not group:
-                        continue
-                    
-                    start_time = group[0]["start"]
-                    end_time = group[-1]["end"]
-                    
-                    # Çakışan zamanları önle - önceki altyazının bitiş zamanından sonra başlat
-                    if start_time < last_subtitle_end + 0.2:  # 0.2 saniyelik güvenlik boşluğu
-                        start_time = last_subtitle_end + 0.2
-                    
-                    # Kelime sayısına göre minimum süre hesapla
-                    word_count = len(group)
-                    min_duration = max(1.0, word_count * 0.3)  # En az 1 saniye veya kelime başına 0.3 saniye
-                    
-                    # Minimum süre kontrolü
-                    if end_time - start_time < min_duration:
-                        end_time = start_time + min_duration
-                    
-                    # Grup metnini oluştur
-                    text = " ".join([w["word"] for w in group])
-                    
-                    # SRT girişi ekle
-                    f.write(f"{subtitle_index}\n")
-                    f.write(f"{format_srt_time(start_time)} --> {format_srt_time(end_time)}\n")
-                    f.write(f"{text}\n\n")
-                    
-                    # Son altyazının bitiş zamanını güncelle
-                    last_subtitle_end = end_time
-                    subtitle_index += 1
-                
-                # Bir sonraki ses dosyası için kümülatif zamanı güncelle
-                # Ses dosyası arasında daha büyük bir boşluk bırak (0.2 saniye)
-                cumulative_time += audio_durations[i] + 0.2
+                subtitle_index += 1
             
         return True
     except Exception as e:

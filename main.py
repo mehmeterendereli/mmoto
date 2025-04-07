@@ -213,16 +213,25 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
         # 9. SUBTITLE RENDERING - ADIM 9: Altyazı Oluşturma
         try:
             font_path = config.get("font_path", "") if config else ""
-            subtitled_video = render_subtitles(
-                video_with_audio,
-                content_data["response"],
-                font_path,
-                project_folder,
-                subtitle_language=subtitle_language,  # Altyazı dili kullanılır
-                content_language=language,           # İçerik dili gerekirse çeviri için kullanılır
-                openai_api_key=openai_api_key
-            )
-            log_message(f"Subtitles added in {subtitle_language} language")
+            use_subtitles = config.get("use_subtitles", False) if config else False
+            
+            # Altyazı gösterilmesi seçeneğine göre işlem yap
+            if use_subtitles:
+                log_message(f"Altyazılar oluşturuluyor. Dil: {subtitle_language}")
+                subtitled_video = render_subtitles(
+                    video_with_audio,
+                    content_data["response"],
+                    font_path,
+                    project_folder,
+                    subtitle_language=subtitle_language,  # Altyazı dili kullanılır
+                    content_language=language,           # İçerik dili gerekirse çeviri için kullanılır
+                    openai_api_key=openai_api_key
+                )
+                log_message(f"Subtitles added in {subtitle_language} language")
+            else:
+                log_message("Altyazı gösterme devre dışı bırakıldı, işlem atlanıyor")
+                subtitled_video = video_with_audio  # Altyazısız olarak devam et
+                
         except Exception as e:
             log_message(f"Altyazı oluşturma hatası: {str(e)}", True)
             subtitled_video = video_with_audio  # Altyazısız video ile devam et

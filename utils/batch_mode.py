@@ -80,17 +80,23 @@ def process_batch(topic_list: List[str], max_videos: int = 10, delay_minutes: in
                                       config["default_tts_voice"], project_folder)
             print(f"{len(audio_files)} adet ses dosyası oluşturuldu")
             
-            # Altyazıları ekle
-            subtitled_video = render_subtitles(processed_video, content_data["response"], 
-                                              config["font_path"], project_folder)
-            print("Altyazılar eklendi")
-            
-            # Sesleri birleştir
-            video_with_audio = merge_audio(subtitled_video, audio_files, project_folder)
+            # Sesleri videoyla birleştir
+            video_with_audio = merge_audio(processed_video, audio_files, project_folder)
             print("Sesler birleştirildi")
             
+            # Altyazıları ekle (eğer etkinleştirilmişse)
+            use_subtitles = config.get("use_subtitles", False)
+            if use_subtitles:
+                print(f"Altyazılar ekleniyor")
+                subtitled_video = render_subtitles(video_with_audio, content_data["response"], 
+                                                  config["font_path"], project_folder)
+                print("Altyazılar eklendi")
+            else:
+                print("Altyazı gösterme devre dışı, işlem atlanıyor")
+                subtitled_video = video_with_audio
+            
             # Kapanış sahnesini ekle
-            final_video = add_closing_scene(video_with_audio, config["closing_video_path"], project_folder)
+            final_video = add_closing_scene(subtitled_video, config["closing_video_path"], project_folder)
             print("Kapanış sahnesi eklendi")
             
             # Metadata oluştur

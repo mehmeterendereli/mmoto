@@ -979,5 +979,101 @@
         "language": "en",
         "tts_language": "en",
         "subtitle_language": "en"
+    },
+    {
+        "topic": "Ya Hologramlar Gerçek Olsaydı? 🤖✨",
+        "title": "Hologramlar Gerçek Olsaydı? 🤖✨",
+        "project_folder": "video_2025-04-07_16-22-54",
+        "creation_date": "2025-04-07 16:25:36",
+        "keywords": [
+            "Hologram",
+            "Virtual",
+            "Education",
+            "Surgery",
+            "Concert"
+        ],
+        "language": "tr",
+        "tts_language": "tr",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "Dünya'nın En Soğuk Yeri Neresi? 🥶❄️",
+        "title": "Dünya'nın En Soğuk Yeri Neresi? 🥶❄️ Keşfet!",
+        "project_folder": "video_2025-04-07_16-40-29",
+        "creation_date": "2025-04-07 16:43:19",
+        "keywords": [
+            "Antarctica",
+            "Ice",
+            "Wind",
+            "Darkness",
+            "Research"
+        ],
+        "language": "tr",
+        "tts_language": "tr",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "Arkasındaki Sır: Zaman Yolculuğu Mümkün mü? ⏳🚀",
+        "title": "Zaman Yolculuğu: Gerçek mi Hayal mi? 🚀⏳",
+        "project_folder": "video_2025-04-07_16-49-53",
+        "creation_date": "2025-04-07 16:53:04",
+        "keywords": [
+            "Time",
+            "Physics",
+            "Einstein",
+            "Blackhole",
+            "Wormhole"
+        ],
+        "language": "tr",
+        "tts_language": "tr",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "İşte bu yüzden Zihninizi Kontrol Edemezsiniz! 🧠🔍",
+        "title": "Zihninizin Kontrolünü Neden Kaybediyorsunuz? 🧠",
+        "project_folder": "video_2025-04-07_20-01-20",
+        "creation_date": "2025-04-07 20:03:59",
+        "keywords": [
+            "Mind",
+            "Subconscious",
+            "Meditation",
+            "Awareness",
+            "Childhood"
+        ],
+        "language": "tr",
+        "tts_language": "tr",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "İnanamayacaksın: Yapay Zeka Neler Yapabiliyor? 🤖🧠",
+        "title": "Yapay Zeka: Geleceği Şekillendiren Güç! 🤖✨",
+        "project_folder": "video_2025-04-08_01-30-00",
+        "creation_date": "2025-04-08 01:31:42",
+        "keywords": [
+            "Artificial",
+            "Health",
+            "Vehicles",
+            "Education",
+            "Assistants"
+        ],
+        "language": "tr",
+        "tts_language": "tr",
+        "subtitle_language": "tr"
+    },
+    {
+        "topic": "The Secret Behind Color Changing Paints! 🎨✨",
+        "title": "Unlock Color Changing Paints! 🎨✨",
+        "project_folder": "video_2025-04-08_01-39-15",
+        "creation_date": "2025-04-08 01:43:04",
+        "keywords": [
+            "Paints",
+            "Pigments",
+            "Crystals",
+            "Mood",
+            "Sunlight"
+        ],
+        "language": "en",
+        "tts_language": "en",
+        "subtitle_language": "tr"
     }
 ]

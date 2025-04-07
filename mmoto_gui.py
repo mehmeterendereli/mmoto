@@ -115,6 +115,7 @@ class MMotoApp(ctk.CTk):
         self.ui_language_var = ctk.StringVar(value=DEFAULT_UI_LANGUAGE)
         self.content_language_var = ctk.StringVar(value=DEFAULT_CONTENT_LANGUAGE) 
         self.subtitle_language_var = ctk.StringVar(value=DEFAULT_SUBTITLE_LANGUAGE)
+        self.use_subtitles_var = ctk.BooleanVar(value=False)  # Varsayılan değer
         
         # Geriye dönük uyumluluk için eski language_var'ı ui_language_var'a bağla
         self.language_var = self.ui_language_var
@@ -505,6 +506,24 @@ class MMotoApp(ctk.CTk):
         )
         self.subtitle_lang_dropdown.grid(row=2, column=1, padx=20, pady=15, sticky="w")
         
+        # Altyazı Etkinleştirme Seçeneği
+        subtitle_enable_label = ctk.CTkLabel(settings_content, text=_("use_subtitles"))
+        subtitle_enable_label.grid(row=3, column=0, padx=20, pady=15, sticky="w")
+        
+        # Altyazı etkinleştirme değişkeni
+        self.use_subtitles_var = ctk.BooleanVar(value=False)  # Varsayılan değer
+        
+        # Altyazı etkinleştirme checkbox
+        subtitle_enable_checkbox = ctk.CTkCheckBox(
+            settings_content,
+            text="",
+            variable=self.use_subtitles_var,
+            onvalue=True,
+            offvalue=False,
+            command=self.on_subtitle_toggle
+        )
+        subtitle_enable_checkbox.grid(row=3, column=1, padx=20, pady=15, sticky="w")
+        
         # Dropdown'ların başlangıç değerlerini ayarla
         self.update_language_dropdowns()
         
@@ -644,45 +663,68 @@ class MMotoApp(ctk.CTk):
                             config["subtitle_language"] = code
                             with open("config.json", "w", encoding="utf-8") as f:
                                 json.dump(config, f, indent=2, ensure_ascii=False)
-                            self.add_log(f"Altyazı dili config.json'a kaydedildi: {code}")
                         except Exception as save_error:
                             self.add_log(f"Config kaydetme hatası: {str(save_error)}")
                     
                     break
         except Exception as e:
             self.add_log(f"Dil değiştirme hatası: {str(e)}")
+    
+    def on_subtitle_toggle(self):
+        """Altyazı açma/kapama seçeneği değiştiğinde çağrılır"""
+        try:
+            is_enabled = self.use_subtitles_var.get()
+            self.add_log(f"Altyazı gösterimi: {'Açık' if is_enabled else 'Kapalı'}")
             
+            # Config dosyasına kaydet
+            try:
+                # Mevcut config'i değiştir
+                config = {}
+                if os.path.exists("config.json"):
+                    with open("config.json", "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                
+                config["use_subtitles"] = is_enabled
+                with open("config.json", "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+                self.add_log(f"Altyazı ayarı config.json'a kaydedildi: {is_enabled}")
+            except Exception as save_error:
+                self.add_log(f"Config kaydetme hatası: {str(save_error)}")
+        except Exception as e:
+            self.add_log(f"Altyazı ayarını değiştirme hatası: {str(e)}")
+    
     def load_config(self, silent=False):
         """API anahtarlarını ve ayarları config.json dosyasından yükler"""
+        
+        has_changes = False  # Değişiklik olup olmadığını izlemek için
+        
         try:
             if os.path.exists("config.json"):
                 with open("config.json", "r", encoding="utf-8") as f:
                     config = json.load(f)
                 
-                # Değişiklik kontrolü için flag
-                has_changes = False
-                
                 # API anahtarlarını yükle
-                if "openai_api_key" in config:
-                    self.openai_api_var.set(config["openai_api_key"])
-                    
-                if "pexels_api_key" in config:
-                    self.pexels_api_var.set(config["pexels_api_key"])
-                    
-                if "youtube_api_key" in config:
-                    self.youtube_api_var.set(config["youtube_api_key"])
-                    
-                if "pixabay_api_key" in config:
-                    self.pixabay_api_var.set(config["pixabay_api_key"])
+                openai_api_key = config.get("openai_api_key", "")
+                pexels_api_key = config.get("pexels_api_key", "")
+                pixabay_api_key = config.get("pixabay_api_key", "")
+                youtube_api_key = config.get("youtube_api_key", "")
                 
-                # YouTube yükleme seçeneği
-                if "upload_to_youtube" in config:
-                    self.upload_to_youtube_var.set(config.get("upload_to_youtube", True))
+                # API stringvar nesnelerini güncelle
+                self.openai_api_var.set(openai_api_key)
+                self.pexels_api_var.set(pexels_api_key)
+                self.pixabay_api_var.set(pixabay_api_key)
+                self.youtube_api_var.set(youtube_api_key)
+                
+                # Varsayılan TTS ses modelini yükle
+                default_tts_voice = config.get("default_tts_voice", "alloy")
                 
                 # Dil ayarlarını yükle
                 ui_lang = config.get("ui_language", DEFAULT_UI_LANGUAGE)
                 content_lang = config.get("content_language", DEFAULT_CONTENT_LANGUAGE)
                 subtitle_lang = config.get("subtitle_language", DEFAULT_SUBTITLE_LANGUAGE)
+                
+                # Altyazı gösterme ayarını yükle
+                use_subtitles = config.get("use_subtitles", False)
                 
                 # Sadece config dosyasındaki değerlerden farklı ise güncelle
                 # Bu, dil değişim döngüsünü önlemek için önemli
@@ -702,10 +744,16 @@ class MMotoApp(ctk.CTk):
                         self.subtitle_language_var.set(subtitle_lang)
                         has_changes = True
                     
+                    # Altyazı gösterme ayarını güncelle
+                    if use_subtitles != self.use_subtitles_var.get():
+                        self.use_subtitles_var.set(use_subtitles)
+                        has_changes = True
+                    
                     # Değişiklik olduysa log mesajı ekle
                     if has_changes:
                         self.add_log(f"Ayarlar dosyadan yüklendi")
                         self.add_log(f"Dil ayarları: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
+                        self.add_log(f"Altyazı gösterimi: {'Açık' if use_subtitles else 'Kapalı'}")
                         
                     # Arayüz dilini ayarla (her durumda yapılmalı)
                     language_manager.set_language(self.ui_language_var.get())
@@ -713,11 +761,11 @@ class MMotoApp(ctk.CTk):
                 return config
             else:
                 if not silent:
-                    self.add_log("Config dosyası bulunamadı, varsayılan değerler kullanılıyor.")
+                    self.add_log("config.json dosyası bulunamadı, varsayılan ayarlar kullanılıyor.")
                 return {}
         except Exception as e:
             if not silent:
-                self.add_log(f"Config yükleme hatası: {str(e)}")
+                self.add_log(f"Config dosyası yükleme hatası: {str(e)}")
             return {}
     
     def on_language_change(self, *args):
@@ -883,45 +931,34 @@ class MMotoApp(ctk.CTk):
         """Ayarları kaydeder"""
         try:
             # Güncel ayarları al
+            ui_lang = self.ui_language_var.get()
+            content_lang = self.content_language_var.get()
+            subtitle_lang = self.subtitle_language_var.get()
+            use_subtitles = self.use_subtitles_var.get()
+
+            # Mevcut config'i yükle veya yeni oluştur
             config = {}
             if os.path.exists("config.json"):
                 with open("config.json", "r", encoding="utf-8") as f:
                     config = json.load(f)
             
-            # İçerik dili
-            content_lang = self.content_language_var.get()
-            ui_lang = self.ui_language_var.get()
-            subtitle_lang = self.subtitle_language_var.get()
-            
-            # Değişiklik yapılacak mı kontrol et
-            has_changes = False
-            if config.get("ui_language") != ui_lang:
-                has_changes = True
-            if config.get("content_language") != content_lang:
-                has_changes = True
-            if config.get("tts_language") != content_lang:
-                has_changes = True  
-            if config.get("subtitle_language") != subtitle_lang:
-                has_changes = True
-            
             # Dil ayarlarını kaydet
             config["ui_language"] = ui_lang
             config["content_language"] = content_lang
-            config["tts_language"] = content_lang  # İçerik dili ile aynı olmalı
+            config["tts_language"] = content_lang  # TTS dili içerik diliyle aynı olsun
             config["subtitle_language"] = subtitle_lang
+            config["use_subtitles"] = use_subtitles
             
-            # Değişiklik varsa log mesajı
-            if has_changes:
-                self.add_log(f"Dil ayarları güncellendi: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
-            
-            # Dosyaya yaz
+            # Config dosyasına kaydet
             with open("config.json", "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
-            # Başarı mesajı
+            self.add_log(f"Dil ayarları güncellendi: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
+            self.add_log(f"Altyazı gösterimi ayarlandı: {'Açık' if use_subtitles else 'Kapalı'}")
+            
+            # Ayarların kaydedildiğini belirtmek için mesaj göster
             self.settings_status_var.set(_("settings_saved"))
             self.after(3000, lambda: self.settings_status_var.set(""))
-            
         except Exception as e:
             self.settings_status_var.set(f"{_('error_prefix')}{str(e)}")
             self.after(3000, lambda: self.settings_status_var.set(""))
