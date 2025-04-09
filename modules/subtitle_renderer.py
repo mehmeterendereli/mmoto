@@ -3,1052 +3,772 @@
 
 import os
 import subprocess
-from typing import List, Dict, Any, Tuple
-import tempfile
-import shutil
 import json
-import textwrap
-import re
+import shutil
+from typing import List, Dict, Any
 from datetime import datetime
-from openai import OpenAI
+import logging
 
-# PIL modülünü dahil et (kurulu değilse uyarı ver)
-try:
-    from PIL import Image, ImageDraw, ImageFont
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
-    print("Uyarı: PIL kütüphanesi bulunamadı. PNG altyazı yöntemi kullanılamayacak.")
-
-# Metni belirtilen dile çeviren fonksiyon
-def translate_text(text: str, source_language: str, target_language: str, openai_api_key: str) -> str:
-    """
-    Metni belirtilen dile çevirir
-    
-    Args:
-        text (str): Çevrilecek metin
-        source_language (str): Kaynak dil kodu (örn. "tr", "en")
-        target_language (str): Hedef dil kodu (örn. "tr", "en")
-        openai_api_key (str): OpenAI API anahtarı
-    
-    Returns:
-        str: Çevrilmiş metin
-    """
-    # Diller aynıysa çeviriye gerek yok
-    if source_language == target_language or not text.strip() or not openai_api_key:
-        return text
-    
-    try:
-        # Dil isimlerini belirle
-        language_names = {
-            "tr": "Turkish",
-            "en": "English",
-            "es": "Spanish",
-            "fr": "French",
-            "de": "German",
-            "it": "Italian",
-            "pt": "Portuguese",
-            "ru": "Russian",
-            "ar": "Arabic",
-            "ja": "Japanese",
-            "ko": "Korean",
-            "zh": "Chinese"
-        }
-        
-        source_lang_name = language_names.get(source_language, "Unknown")
-        target_lang_name = language_names.get(target_language, "English")
-        
-        # OpenAI API'sini kullan
-        client = OpenAI(api_key=openai_api_key)
-        
-        prompt = f"""
-        Translate the following {source_lang_name} text to {target_lang_name}. 
-        Keep the original meaning, tone, and style as much as possible.
-        Only return the translated text, with no explanations or additional text.
-        
-        Text to translate: {text}
-        """
-        
-        # API isteği gönder
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a professional translator."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=500
-        )
-        
-        # Çevrilmiş metni al
-        translated_text = response.choices[0].message.content.strip()
-        
-        return translated_text
-    
-    except Exception as e:
-        print(f"Çeviri hatası: {str(e)}")
-        return text  # Hata durumunda orijinal metni döndür
-
-def create_word_level_ass(sentences: List[str], timings: List[Dict[str, Any]], output_path: str) -> bool:
-    """
-    Kelime seviyesinde ASS/SSA altyazı dosyası oluşturur
-    
-    Args:
-        sentences (List[str]): Altyazı cümleleri (referans için)
-        timings (List[Dict[str, Any]]): Kelime zamanlamaları
-        output_path (str): Çıktı ASS dosyasının yolu
-    
-    Returns:
-        bool: Başarılı ise True, değilse False
-    """
-    try:
-        # Font dosyasının tam yolunu al
-        font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts", "Anton-Regular.ttf")
-        font_name = "Anton-Regular"
-        
-        # Font dosyasının varlığını kontrol et
-        if not os.path.exists(font_path):
-            print(f"Uyarı: Anton-Regular.ttf bulunamadı: {font_path}")
-            font_name = "Arial" # Yedek font
-        
-        # ASS dosyası başlık bölümü
-        ass_header = f"""[Script Info]
-Title: Kelime Bazlı Dinamik Altyazılar
-ScriptType: v4.00+
-WrapStyle: 0
-PlayResX: 1920
-PlayResY: 1080
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_name},60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,6,0,2,10,10,138,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
-        
-        # ASS dosyasını oluştur
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(ass_header)
-            
-            # Tüm kelimeleri topla
-            all_words = []
-            cumulative_time = 0.0
-            
-            # Ses dosyalarının gerçek sürelerini hesapla
-            audio_durations = []
-            for timing_data in timings:
-                if "words" in timing_data and timing_data["words"] and len(timing_data["words"]) > 0:
-                    last_word = timing_data["words"][-1]
-                    if "end" in last_word:
-                        audio_durations.append(last_word["end"])
-                    else:
-                        audio_durations.append(0.0)
-                else:
-                    audio_durations.append(0.0)
-            
-            # Her ses dosyası için kelimeleri ekle
-            for i, timing_data in enumerate(timings):
-                if "words" in timing_data and timing_data["words"]:
-                    for word_info in timing_data["words"]:
-                        if "word" in word_info and "start" in word_info and "end" in word_info:
-                            # Kelime bilgisini kopyala ve kümülatif zamanı ekle
-                            adjusted_word = {
-                                "word": word_info["word"].strip(),
-                                "start": word_info["start"] + cumulative_time,
-                                "end": word_info["end"] + cumulative_time
-                            }
-                            all_words.append(adjusted_word)
-                    
-                    # Bir sonraki ses dosyası için kümülatif zamanı güncelle
-                    # Gerçek ses süresini kullan ve daha az boşluk bırak
-                    if i < len(audio_durations):
-                        cumulative_time += audio_durations[i] + 0.05  # 0.05 saniye boşluk (daha az)
-            
-            # Her kelime için ASS olayı ekle
-            for i, word in enumerate(all_words):
-                start_time = format_ass_time(word["start"])
-                
-                # Her kelimenin kendi zamanlamasını kullan, çok küçük bir boşluk bırak
-                # Bu, senkronizasyonu daha doğru hale getirir
-                if i < len(all_words) - 1:
-                    # Bir sonraki kelimeyle çakışmayı önle, ama çok küçük bir boşluk bırak
-                    next_start = all_words[i+1]["start"]
-                    # Kelimenin kendi bitiş zamanını kullan, ama bir sonraki kelimenin başlangıcını geçme
-                    end_time = format_ass_time(min(word["end"] + 0.02, next_start - 0.01))
-                else:
-                    # Son kelime için normal bitiş zamanı + küçük bir boşluk
-                    end_time = format_ass_time(word["end"] + 0.02)
-                
-                text = word["word"]
-                
-                # Özel karakterleri escape et
-                text = text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
-                
-                # ASS olayı ekle - alt-ortada göster (alignment=7)
-                f.write(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n")
-        
-        return True
-    except Exception as e:
-        print(f"ASS dosyası oluşturma hatası: {str(e)}")
-        return False
-
-def render_subtitles(video_path: str, sentences: List[str], font_path: str, project_folder: str, 
-                     subtitle_language: str = "tr", content_language: str = "tr", openai_api_key: str = "") -> str:
-    """
-    Videoya altyazı ekler
-    
-    Args:
-        video_path (str): İşlenecek video dosyasının yolu
-        sentences (List[str]): Eklenecek altyazılar
-        font_path (str): Kullanılacak font dosyasının yolu
-        project_folder (str): Proje klasörünün yolu
-        subtitle_language (str): Altyazı dili (default: "tr")
-        content_language (str): İçerik dili (default: "tr")
-        openai_api_key (str): OpenAI API anahtarı (çeviri için)
-    
-    Returns:
-        str: Altyazı eklenmiş video dosyasının yolu
-    """
-    # Altyazı bilgilerini kaydedecek dosya
-    subtitle_log_path = os.path.join(project_folder, "subtitle_log.txt")
-    
-    # FFmpeg yolunu config.json'dan al
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
-    ffmpeg_path = "ffmpeg"  # Varsayılan değer
-    ffprobe_path = "ffprobe"  # Varsayılan değer
-    
-    # Eğer altyazı dili ile içerik dili farklıysa, çeviri yap
-    translated_sentences = sentences
-    if subtitle_language != content_language and openai_api_key:
-        print(f"Altyazılar {content_language} dilinden {subtitle_language} diline çevriliyor...")
-        translated_sentences = []
-        for sentence in sentences:
-            translated = translate_text(sentence, content_language, subtitle_language, openai_api_key)
-            translated_sentences.append(translated)
-            print(f"Çeviri: {sentence} -> {translated}")
-    
-    with open(subtitle_log_path, "w", encoding="utf-8") as log_file:
-        log_file.write(f"=== Altyazı İşlemi Başlangıcı: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
-        log_file.write(f"Video yolu: {video_path}\n")
-        log_file.write(f"Font yolu: {font_path}\n")
-        log_file.write(f"Altyazı dili: {subtitle_language}\n")
-        log_file.write(f"İçerik dili: {content_language}\n")
-        log_file.write(f"Altyazı sayısı: {len(translated_sentences)}\n\n")
-        log_file.write("--- Altyazı İçerikleri ---\n")
-        for i, sentence in enumerate(translated_sentences):
-            log_file.write(f"Altyazı {i+1}: {sentence}\n")
-        log_file.write("\n")
-    
-    # Basit bir HTML önizleme dosyası oluştur
-    html_preview = os.path.join(project_folder, "subtitle_preview.html")
-    with open(html_preview, 'w', encoding='utf-8') as html_file:
-        html_file.write("""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Altyazı Önizleme</title>
-    <style>
-        body { background-color: #000; color: #fff; font-family: Arial, sans-serif; text-align: center; }
-        .container { display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: center; }
-        .subtitle-box { 
-            width: 80%; 
-            max-width: 400px; 
-            background-color: rgba(0,0,0,0.8); 
-            padding: 20px; 
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(255,255,255,0.2);
-            margin-bottom: 20px;
-        }
-        .subtitle { 
-            font-size: 18px; 
-            font-weight: bold; 
-            margin: 0;
-            padding: 10px;
-            text-shadow: 2px 2px 2px rgba(0,0,0,0.8);
-        }
-        h1 { margin-bottom: 30px; }
-        .note { color: #aaa; font-size: 14px; margin-top: 20px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Altyazı Önizleme</h1>
-""")
-        
-        # Altyazıları ekle
-        for i, sentence in enumerate(translated_sentences):
-            # Cümleyi daha anlamlı bir şekilde böl
-            sentence = sentence.strip()
-            
-            # Noktalama işaretlerini kontrol et (virgül, noktalı virgül, iki nokta)
-            punctuation_marks = [',', ';', ':']
-            best_split_point = -1
-            
-            # Cümlenin ortasına yakın bir noktalama işareti bul
-            sentence_length = len(sentence)
-            mid_point = sentence_length // 2
-            
-            # Ortaya en yakın noktalama işaretini bul
-            min_distance = sentence_length
-            for idx, char in enumerate(sentence):
-                if char in punctuation_marks:
-                    distance = abs(idx - mid_point)
-                    if distance < min_distance:
-                        min_distance = distance
-                        best_split_point = idx + 1  # Noktalama işaretinden sonra böl
-            
-            # Eğer uygun noktalama işareti bulunamazsa, en yakın boşluğu bul
-            if best_split_point == -1:
-                min_distance = sentence_length
-                for idx, char in enumerate(sentence):
-                    if char == ' ':
-                        distance = abs(idx - mid_point)
-                        if distance < min_distance:
-                            min_distance = distance
-                            best_split_point = idx
-            
-            # Hala bölme noktası bulunamadıysa, ortadan böl
-            if best_split_point == -1:
-                best_split_point = mid_point
-            
-            first_half = sentence[:best_split_point].strip()
-            second_half = sentence[best_split_point:].strip()
-            
-            html_file.write('        <div class="subtitle-box">\n')
-            html_file.write(f'            <p class="subtitle">Cümle {i+1} - İlk Yarı: {first_half}</p>\n')
-            html_file.write('        </div>\n')
-            
-            html_file.write('        <div class="subtitle-box">\n')
-            html_file.write(f'            <p class="subtitle">Cümle {i+1} - İkinci Yarı: {second_half}</p>\n')
-            html_file.write('        </div>\n')
-        
-        html_file.write("""        <p class="note">Not: Bu sayfa sadece altyazıların önizlemesi içindir. 
-        Asıl videoyu görüntülemez.</p>
-</div>
-</body>
-</html>""")
-    
-    # Config dosyasından FFmpeg ve FFprobe yollarını al
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                
-                # Kök dizini hesapla
-                root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                
-                # FFmpeg yolu
-                if "ffmpeg_path" in config:
-                    ffmpeg_path = os.path.join(root_dir, config["ffmpeg_path"])
-                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write(f"FFmpeg yolu: {ffmpeg_path}\n")
-                
-                # FFprobe yolu
-                if "ffprobe_path" in config:
-                    ffprobe_path = os.path.join(root_dir, config["ffprobe_path"])
-                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write(f"FFprobe yolu: {ffprobe_path}\n")
-        except Exception as e:
-            print(f"Config dosyası okuma hatası: {str(e)}")
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"Config dosyası okuma hatası: {str(e)}\n")
-    
-    if not os.path.exists(video_path):
-        print(f"Hata: Video dosyası bulunamadı: {video_path}")
-        # Boş bir çıktı dosyası oluştur
-        subtitled_video = os.path.join(project_folder, "subtitled_video.mp4")
-        if os.path.exists(video_path):
-            shutil.copy2(video_path, subtitled_video)
-        else:
-            with open(subtitled_video, 'wb') as f:
-                f.write(b'')
-        return subtitled_video
-    
-    # Font dosyasını kontrol et
-    if not os.path.exists(font_path):
-        # Font yolunu daha güvenli bir şekilde hesapla
-        font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts", "Montserrat-Bold.ttf")
-        
-        if not os.path.exists(font_path):
-            print("Uyarı: Font dosyası bulunamadı, font kullanılmayacak")
-            font_path = ""
-    
-    # Font yolunu göreli değil mutlak yol olarak kullan
-    if font_path:
-        font_path = os.path.abspath(font_path)
-        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-            log_file.write(f"Mutlak font yolu: {font_path}\n")
-    
-    try:
-        # Altyazılı video dosyasının yolu
-        subtitled_video = os.path.join(project_folder, "subtitled_video.mp4")
-        
-        # Video süresini öğren
-        duration_cmd = f'"{ffprobe_path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{os.path.abspath(video_path)}"'
-        duration = 0
-        try:
-            result = subprocess.run(duration_cmd, shell=True, capture_output=True, text=True)
-            duration = float(result.stdout.strip())
-            print(f"Video süresi: {duration} saniye")
-        except Exception as e:
-            print(f"Video süresi alınamadı: {str(e)}")
-            duration = 30  # Varsayılan değer
-
-        # Ses dosyalarının sürelerini al - her ses dosyası bir altyazı cümlesi içindir
-        audio_durations = []
-        audio_total_duration = 0
-        
-        # TTS ses dosyalarını kontrol et
-        tts_audio_dir = os.path.join(project_folder, "tts_audio")
-        if os.path.exists(tts_audio_dir):
-            # Ses dosyalarını listele
-            audio_files = []
-            for file in os.listdir(tts_audio_dir):
-                if file.endswith('.mp3') or file.endswith('.wav'):
-                    audio_files.append(os.path.join(tts_audio_dir, file))
-            
-            # Ses dosyalarını sırala (audio_01.mp3, audio_02.mp3, ... şeklinde)
-            audio_files.sort()
-            
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"Bulunan ses dosyaları: {len(audio_files)}\n")
-                for i, audio_file in enumerate(audio_files):
-                    log_file.write(f"  {i+1}. {os.path.basename(audio_file)}\n")
-            
-            # Her bir ses dosyasının süresini al
-            for i, audio_file in enumerate(audio_files):
-                if os.path.exists(audio_file):
-                    try:
-                        # Ses dosyasının süresini al
-                        audio_duration_cmd = f'"{ffprobe_path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{os.path.abspath(audio_file)}"'
-                        audio_result = subprocess.run(audio_duration_cmd, shell=True, capture_output=True, text=True)
-                        file_duration = float(audio_result.stdout.strip())
-                        audio_durations.append(file_duration)
-                        audio_total_duration += file_duration
-                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                            log_file.write(f"Ses dosyası {os.path.basename(audio_file)} süresi: {file_duration:.2f} saniye\n")
-                    except Exception as e:
-                        # Süre alınamazsa cümle sayısına göre yaklaşık bir süre hesapla
-                        estimated_duration = duration / len(translated_sentences)
-                        audio_durations.append(estimated_duration)
-                        audio_total_duration += estimated_duration
-                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                            log_file.write(f"Ses dosyası {os.path.basename(audio_file)} süre alınamadı: {str(e)}, tahmin edildi: {estimated_duration:.2f} saniye\n")
-            
-            # Ses dosyası sayısı ile cümle sayısı farklı ise ayarlama yap
-            if len(audio_durations) != len(translated_sentences):
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write(f"UYARI: Ses dosyası sayısı ({len(audio_durations)}) ve cümle sayısı ({len(translated_sentences)}) eşleşmiyor!\n")
-                
-                # Ses dosyası sayısı daha az ise, eksik olanları tahmin et
-                if len(audio_durations) < len(translated_sentences):
-                    remaining_duration = max(0, duration - audio_total_duration)
-                    remaining_sentences = len(translated_sentences) - len(audio_durations)
-                    estimated_per_sentence = remaining_duration / max(1, remaining_sentences)
-                    
-                    for i in range(remaining_sentences):
-                        audio_durations.append(estimated_per_sentence)
-                        audio_total_duration += estimated_per_sentence
-                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                            log_file.write(f"Eksik ses dosyası için tahmin: {estimated_per_sentence:.2f} saniye\n")
-                
-                # Ses dosyası sayısı daha fazla ise, fazla olanları yok say
-                elif len(audio_durations) > len(translated_sentences):
-                    audio_durations = audio_durations[:len(translated_sentences)]
-                    audio_total_duration = sum(audio_durations)
-                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write(f"Fazla ses dosyaları yok sayıldı. Toplam süre: {audio_total_duration:.2f} saniye\n")
-        else:
-            # TTS klasörü yoksa, cümle sayısına göre eşit süre böl
-            for i in range(len(translated_sentences)):
-                estimated_duration = duration / len(translated_sentences)
-                audio_durations.append(estimated_duration)
-                audio_total_duration += estimated_duration
-            
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"TTS klasörü bulunamadı, her cümle için tahmini süre: {duration/len(translated_sentences):.2f} saniye\n")
-        
-        # Kelime zamanlamalarını yükle
-        word_timings = load_word_timings(project_folder)
-        
-        # Altyazı dosyası yolları
-        srt_path = os.path.join(project_folder, "subtitles.srt")
-        ass_path = os.path.join(project_folder, "subtitles.ass")
-        
-        # Kelime zamanlamaları varsa, kelime seviyesinde ASS oluştur (yeni yöntem)
-        if word_timings:
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"Kelime zamanlamaları bulundu: {len(word_timings)} dosya\n")
-            
-            # Anton-Regular.ttf fontunu kullan
-            anton_font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts", "Anton-Regular.ttf")
-            if os.path.exists(anton_font_path):
-                font_path = anton_font_path
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write(f"Anton-Regular.ttf fontu kullanılacak: {font_path}\n")
-            
-            # Kelime seviyesinde ASS oluştur
-            if create_word_level_ass(translated_sentences, word_timings, ass_path):
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write(f"Kelime seviyesinde ASS dosyası oluşturuldu: {ass_path}\n\n")
-                
-                # ASS dosyasını kullanarak altyazı ekle
-                ass_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "ass={ass_path.replace("\\", "/")}" -c:a copy "{os.path.abspath(subtitled_video)}"'
-                
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("--- ASS Altyazı Komutu ---\n")
-                    log_file.write(f"{ass_subtitle_cmd}\n\n")
-                
-                print("ASS altyazı komutu çalıştırılıyor...")
-                
-                try:
-                    ass_result = subprocess.run(ass_subtitle_cmd, shell=True, capture_output=True, text=True)
-                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write("ASS komut çıktısı:\n")
-                        log_file.write(f"STDOUT: {ass_result.stdout}\n")
-                        log_file.write(f"STDERR: {ass_result.stderr}\n\n")
-                    
-                    # Başarılı olup olmadığını kontrol et
-                    if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
-                        print(f"ASS altyazılar başarıyla eklendi: {subtitled_video}")
-                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                            log_file.write("ASS altyazı ekleme başarılı!\n\n")
-                        return subtitled_video
-                    else:
-                        # ASS başarısız olduysa SRT yöntemini dene
-                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                            log_file.write("ASS altyazı ekleme başarısız oldu, SRT yöntemi deneniyor...\n\n")
-                except Exception as e:
-                    print(f"ASS altyazı hatası: {str(e)}")
-                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write(f"ASS altyazı hatası: {str(e)}\n")
-                        log_file.write("SRT yöntemi deneniyor...\n\n")
-            else:
-                # ASS oluşturma başarısız olduysa SRT yöntemini dene
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("ASS dosyası oluşturma başarısız oldu, SRT yöntemi deneniyor...\n\n")
-            
-            # ASS başarısız olduysa veya oluşturulamadıysa, SRT ile devam et
-            # Kelime seviyesinde SRT oluştur
-            create_word_level_srt(translated_sentences, word_timings, srt_path)
-            
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"Kelime seviyesinde SRT dosyası oluşturuldu: {srt_path}\n\n")
-        else:
-            # Kelime zamanlamaları yoksa, eski yöntemi kullan (cümleleri ikiye böl)
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write("Kelime zamanlamaları bulunamadı, cümleleri ikiye bölerek SRT oluşturuluyor...\n")
-            
-            with open(srt_path, 'w', encoding='utf-8') as srt_file:
-                subtitle_index = 1
-                current_time = 0
-                
-                for i, sentence in enumerate(translated_sentences):
-                    if i < len(audio_durations):
-                        total_duration = audio_durations[i]
-                        
-                        # Cümlenin ilk yarısı için zaman aralığı
-                        first_half_start = current_time
-                        first_half_end = current_time + (total_duration / 2)
-                        
-                        # Cümlenin ikinci yarısı için zaman aralığı
-                        second_half_start = first_half_end
-                        second_half_end = current_time + total_duration
-                        
-                        # Bir sonraki cümle için başlangıç zamanını güncelle
-                        current_time = second_half_end
-                        
-                        # Küçük bir boşluk ekleyelim
-                        if i < len(translated_sentences) - 1:
-                            current_time += 0.1
-                    else:
-                        # Eğer ses dosyası yoksa varsayılan hesaplama kullan
-                        total_duration = duration / max(1, len(translated_sentences))
-                        first_half_start = i * total_duration
-                        first_half_end = first_half_start + (total_duration / 2)
-                        second_half_start = first_half_end
-                        second_half_end = (i + 1) * total_duration
-                    
-                    # Cümleyi daha anlamlı bir şekilde böl
-                    sentence = sentence.strip()
-                    
-                    # Noktalama işaretlerini kontrol et (virgül, noktalı virgül, iki nokta)
-                    punctuation_marks = [',', ';', ':']
-                    best_split_point = -1
-                    
-                    # Cümlenin ortasına yakın bir noktalama işareti bul
-                    sentence_length = len(sentence)
-                    mid_point = sentence_length // 2
-                    
-                    # Ortaya en yakın noktalama işaretini bul
-                    min_distance = sentence_length
-                    for idx, char in enumerate(sentence):
-                        if char in punctuation_marks:
-                            distance = abs(idx - mid_point)
-                            if distance < min_distance:
-                                min_distance = distance
-                                best_split_point = idx + 1  # Noktalama işaretinden sonra böl
-                    
-                    # Eğer uygun noktalama işareti bulunamazsa, en yakın boşluğu bul
-                    if best_split_point == -1:
-                        min_distance = sentence_length
-                        for idx, char in enumerate(sentence):
-                            if char == ' ':
-                                distance = abs(idx - mid_point)
-                                if distance < min_distance:
-                                    min_distance = distance
-                                    best_split_point = idx
-                    
-                    # Hala bölme noktası bulunamadıysa, ortadan böl
-                    if best_split_point == -1:
-                        best_split_point = mid_point
-                    
-                    first_half = sentence[:best_split_point].strip()
-                    second_half = sentence[best_split_point:].strip()
-                    
-                    # Log dosyasına bölme bilgisini yaz
-                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write(f"Cümle {i+1} bölme noktası: {best_split_point}/{sentence_length}\n")
-                        log_file.write(f"  İlk yarı: {first_half}\n")
-                        log_file.write(f"  İkinci yarı: {second_half}\n")
-                    
-                    # İlk yarı için SRT girişi ekle
-                    srt_file.write(f"{subtitle_index}\n")
-                    srt_file.write(f"{format_srt_time(first_half_start)} --> {format_srt_time(first_half_end)}\n")
-                    srt_file.write(f"{first_half}\n\n")
-                    subtitle_index += 1
-                    
-                    # İkinci yarı için SRT girişi ekle
-                    srt_file.write(f"{subtitle_index}\n")
-                    srt_file.write(f"{format_srt_time(second_half_start)} --> {format_srt_time(second_half_end)}\n")
-                    srt_file.write(f"{second_half}\n\n")
-                    subtitle_index += 1
-            
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"SRT dosyası oluşturuldu (cümleler ikiye bölündü): {srt_path}\n\n")
-        
-        # SRT dosyasını kullanarak altyazı ekle (ASS başarısız olduysa veya kelime zamanlamaları yoksa)
-        srt_subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "subtitles={srt_path.replace("\\", "/")}" -c:a copy "{os.path.abspath(subtitled_video)}"'
-        
-        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-            log_file.write("--- SRT Altyazı Komutu ---\n")
-            log_file.write(f"{srt_subtitle_cmd}\n\n")
-        
-        print("SRT altyazı komutu çalıştırılıyor...")
-        
-        try:
-            srt_result = subprocess.run(srt_subtitle_cmd, shell=True, capture_output=True, text=True)
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write("SRT komut çıktısı:\n")
-                log_file.write(f"STDOUT: {srt_result.stdout}\n")
-                log_file.write(f"STDERR: {srt_result.stderr}\n\n")
-            
-            # Başarılı olup olmadığını kontrol et
-            if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
-                print(f"SRT altyazılar başarıyla eklendi: {subtitled_video}")
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("SRT altyazı ekleme başarılı!\n\n")
-                return subtitled_video
-            else:
-                # SRT başarısız olduysa drawtext yöntemini dene
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("SRT altyazı ekleme başarısız oldu, drawtext yöntemi deneniyor...\n\n")
-                
-                # drawtext yöntemi - altyazıları iki yarıya bölerek ekle
-                filter_texts = []
-                current_time = 0
-                
-                # Güvenli font yolu 
-                if font_path and os.path.exists(font_path):
-                    # Mutlak yol kullan ve tüm \ karakterlerini \\ yap
-                    safe_font_path = font_path.replace('\\', '\\\\')
-                    # Windows yollarında : karakteri var, bunları da kaçış karakteri ekleyelim
-                    if ':' in safe_font_path:
-                        safe_font_path = safe_font_path.replace(':', '\\:')
-                    font_param = f"fontfile='{safe_font_path}':"
-                else:
-                    font_param = ""
-                
-                for i, sentence in enumerate(translated_sentences):
-                    # Zamanlamayı ses dosyalarına göre hesapla
-                    if i < len(audio_durations):
-                        total_duration = audio_durations[i]
-                        first_half_start = current_time
-                        first_half_end = current_time + (total_duration / 2)
-                        second_half_start = first_half_end
-                        second_half_end = current_time + total_duration
-                        current_time = second_half_end + 0.1  # Küçük bir boşluk ekle
-                    else:
-                        total_duration = duration / max(1, len(translated_sentences))
-                        first_half_start = i * total_duration
-                        first_half_end = first_half_start + (total_duration / 2)
-                        second_half_start = first_half_end
-                        second_half_end = (i + 1) * total_duration
-                    
-                    # Cümleyi daha anlamlı bir şekilde böl
-                    sentence = sentence.strip()
-                    
-                    # Noktalama işaretlerini kontrol et (virgül, noktalı virgül, iki nokta)
-                    punctuation_marks = [',', ';', ':']
-                    best_split_point = -1
-                    
-                    # Cümlenin ortasına yakın bir noktalama işareti bul
-                    sentence_length = len(sentence)
-                    mid_point = sentence_length // 2
-                    
-                    # Ortaya en yakın noktalama işaretini bul
-                    min_distance = sentence_length
-                    for idx, char in enumerate(sentence):
-                        if char in punctuation_marks:
-                            distance = abs(idx - mid_point)
-                            if distance < min_distance:
-                                min_distance = distance
-                                best_split_point = idx + 1  # Noktalama işaretinden sonra böl
-                    
-                    # Eğer uygun noktalama işareti bulunamazsa, en yakın boşluğu bul
-                    if best_split_point == -1:
-                        min_distance = sentence_length
-                        for idx, char in enumerate(sentence):
-                            if char == ' ':
-                                distance = abs(idx - mid_point)
-                                if distance < min_distance:
-                                    min_distance = distance
-                                    best_split_point = idx
-                    
-                    # Hala bölme noktası bulunamadıysa, ortadan böl
-                    if best_split_point == -1:
-                        best_split_point = mid_point
-                    
-                    first_half = sentence[:best_split_point].strip()
-                    second_half = sentence[best_split_point:].strip()
-                    
-                    # Özel karakterleri temizle
-                    first_half = first_half.replace("'", "").replace('"', "").replace(':', "").replace('\\', "")
-                    second_half = second_half.replace("'", "").replace('"', "").replace(':', "").replace('\\', "")
-                    
-                    # İlk yarı için filtre ekle
-                    filter_text = f"drawtext={font_param}fontsize=45:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=10:x=(w-text_w)/2:y=h*0.75:text='{first_half}':enable='between(t,{first_half_start},{first_half_end})'"
-                    filter_texts.append(filter_text)
-                    
-                    # İkinci yarı için filtre ekle
-                    filter_text = f"drawtext={font_param}fontsize=45:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=10:x=(w-text_w)/2:y=h*0.75:text='{second_half}':enable='between(t,{second_half_start},{second_half_end})'"
-                    filter_texts.append(filter_text)
-                
-                # Tüm filtreleri birleştir
-                all_filters = ",".join(filter_texts)
-                
-                # FFmpeg komutunu hazırla ve çalıştır
-                subtitle_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "{all_filters}" -c:a copy "{os.path.abspath(subtitled_video)}"'
-                
-                with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                    log_file.write("--- Drawtext Altyazı Komutu ---\n")
-                    log_file.write(f"{subtitle_cmd}\n\n")
-                
-                print("Drawtext altyazı komutu çalıştırılıyor...")
-                
-                try:
-                    result = subprocess.run(subtitle_cmd, shell=True, capture_output=True, text=True)
-                    with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                        log_file.write("Drawtext komut çıktısı:\n")
-                        log_file.write(f"STDOUT: {result.stdout}\n")
-                        log_file.write(f"STDERR: {result.stderr}\n\n")
-                    
-                    # Başarılı olup olmadığını kontrol et
-                    if os.path.exists(subtitled_video) and os.path.getsize(subtitled_video) > 0:
-                        print(f"Drawtext altyazılar başarıyla eklendi: {subtitled_video}")
-                        with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                            log_file.write("Drawtext altyazı ekleme başarılı!\n\n")
-                        return subtitled_video
-                    else:
-                        # Son çare: orijinal videoyu kopyala
-                        print("Altyazı eklenemedi, orijinal video kopyalanıyor...")
-                        shutil.copy2(video_path, subtitled_video)
-                        return subtitled_video
-                        
-                except Exception as e:
-                    print(f"Drawtext altyazı hatası: {str(e)}")
-                    # Son çare: orijinal videoyu kopyala
-                    shutil.copy2(video_path, subtitled_video)
-                    return subtitled_video
-                
-        except Exception as e:
-            print(f"SRT altyazı hatası: {str(e)}")
-            # Orijinal videoyu kopyala
-            shutil.copy2(video_path, subtitled_video)
-            return subtitled_video
-        
-    except Exception as e:
-        print(f"Altyazı ekleme genel hatası: {str(e)}")
-        # Hata durumunda orijinal videoyu kopyala
-        try:
-            with open(subtitle_log_path, "a", encoding="utf-8") as log_file:
-                log_file.write(f"Genel hata: {str(e)}\n")
-                log_file.write("=== Altyazı İşlemi Sonu (Hata) ===\n")
-            
-            shutil.copy2(video_path, os.path.join(project_folder, "subtitled_video.mp4"))
-            return os.path.join(project_folder, "subtitled_video.mp4")
-        except Exception as copy_error:
-            print(f"Dosya kopyalama hatası: {str(copy_error)}")
-            # Son çare
-            with open(os.path.join(project_folder, "subtitled_video.mp4"), 'wb') as f:
-                f.write(b'')
-            return os.path.join(project_folder, "subtitled_video.mp4")
-
-def format_srt_time(seconds):
-    """
-    Saniye cinsinden süreyi SRT formatında zaman damgasına dönüştürür
-    
-    Args:
-        seconds (float): Saniye cinsinden süre
-        
-    Returns:
-        str: SRT formatında zaman damgası (HH:MM:SS,MS)
-    """
+def format_srt_time(seconds: float) -> str:
+    """Convert seconds to SRT timestamp format"""
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
-    seconds = seconds % 60
-    milliseconds = int((seconds - int(seconds)) * 1000)
-    return f"{hours:02d}:{minutes:02d}:{int(seconds):02d},{milliseconds:03d}"
+    secs = seconds % 60
+    milliseconds = int((secs - int(secs)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{int(secs):02d},{milliseconds:03d}"
 
 def format_ass_time(seconds: float) -> str:
-    """
-    Saniye cinsinden süreyi ASS formatında zaman damgasına dönüştürür
-    
-    Args:
-        seconds (float): Saniye cinsinden süre
-        
-    Returns:
-        str: ASS formatında zaman damgası (H:MM:SS.cs)
-    """
+    """Convert seconds to ASS timestamp format"""
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
-    seconds = seconds % 60
-    centiseconds = int((seconds - int(seconds)) * 100)
-    return f"{hours}:{minutes:02d}:{int(seconds):02d}.{centiseconds:02d}"
+    secs = seconds % 60
+    centiseconds = int((secs - int(secs)) * 100)
+    return f"{hours}:{minutes:02d}:{int(secs):02d}.{centiseconds:02d}"
 
 def load_word_timings(project_folder: str) -> List[Dict[str, Any]]:
-    """
-    Whisper API ile oluşturulan kelime zamanlamalarını yükler
-    
-    Args:
-        project_folder (str): Proje klasörünün yolu
-    
-    Returns:
-        List[Dict[str, Any]]: Kelime zamanlamalarını içeren liste
-    """
+    """Load word timings from Whisper API output"""
     tts_folder = os.path.join(project_folder, "tts_audio")
     timings = []
+    log_path = os.path.join(project_folder, "subtitle_log.txt")
     
     if not os.path.exists(tts_folder):
-        print(f"TTS klasörü bulunamadı: {tts_folder}")
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"TTS folder not found: {tts_folder}\n")
         return timings
     
-    # Önce birleştirilmiş ses dosyasının kelime zamanlamalarını kontrol et
     full_timing_path = os.path.join(tts_folder, "full_timing.json")
     if os.path.exists(full_timing_path):
         try:
             with open(full_timing_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                
-                # Geçerli kelime zamanlamaları var mı kontrol et
-                if isinstance(data, dict) and "words" in data and isinstance(data["words"], list):
-                    # Kelime zamanlamaları var, doğru formatta
-                    print(f"Birleştirilmiş ses dosyasının kelime zamanlamaları bulundu: {len(data['words'])} kelime")
-                    return [data]  # Tek bir zamanlama verisi döndür
-                elif isinstance(data, dict) and "segments" in data and isinstance(data["segments"], list):
-                    # Whisper API'nin farklı bir formatı, segments'ten words'e dönüştür
-                    words = []
-                    for segment in data["segments"]:
-                        if "words" in segment and isinstance(segment["words"], list):
-                            words.extend(segment["words"])
-                    
+            
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Loaded timing data keys: {list(data.keys())}\n")
+            
+            words = []
+            
+            # Farklı veri formatlarını kontrol et
+            # 1. Düz words dizisi formatı
+            if "words" in data and isinstance(data["words"], list):
+                words = [w for w in data["words"] if "word" in w and "start" in w and "end" in w]
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"Found {len(words)} words in direct words field\n")
                     if words:
-                        print(f"Birleştirilmiş ses dosyasının kelime zamanlamaları (segments formatında) bulundu: {len(words)} kelime")
-                        return [{"text": data.get("text", ""), "words": words}]
-                else:
-                    print(f"Geçersiz zamanlama formatı: {full_timing_path}")
-        except Exception as e:
-            print(f"Birleştirilmiş zamanlama dosyası yükleme hatası: {str(e)}")
-    
-    # Birleştirilmiş zamanlama dosyası yoksa veya geçersizse, eski yöntemi kullan
-    print("Birleştirilmiş zamanlama dosyası bulunamadı, ayrı zamanlama dosyalarını kontrol ediliyor...")
-    
-    # Zamanlama dosyalarını bul
-    timing_files = []
-    for file in os.listdir(tts_folder):
-        if file.startswith("timing_") and file.endswith(".json"):
-            timing_files.append(os.path.join(tts_folder, file))
-    
-    # Dosyaları sırala
-    timing_files.sort()
-    
-    # Her dosyayı yükle
-    for timing_file in timing_files:
-        try:
-            with open(timing_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                
-                # Geçerli kelime zamanlamaları var mı kontrol et
-                if isinstance(data, dict) and "words" in data and isinstance(data["words"], list):
-                    # Kelime zamanlamaları var, doğru formatta
-                    timings.append(data)
-                elif isinstance(data, dict) and "segments" in data and isinstance(data["segments"], list):
-                    # Whisper API'nin farklı bir formatı, segments'ten words'e dönüştür
-                    words = []
-                    for segment in data["segments"]:
-                        if "words" in segment and isinstance(segment["words"], list):
-                            words.extend(segment["words"])
+                        log.write(f"Sample word: {words[0]}\n")
+            
+            # 2. Segments formatı
+            elif "segments" in data and isinstance(data["segments"], list):
+                for segment in data["segments"]:
+                    if "words" in segment:
+                        segment_words = [w for w in segment["words"] 
+                                         if "word" in w and "start" in w and "end" in w]
+                        words.extend(segment_words)
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"Found {len(words)} words in segments\n")
+            
+            # 3. API v1+ için alternatif formatlar
+            elif "result" in data:
+                result = data["result"]
+                if "words" in result:
+                    words = [w for w in result["words"] if "word" in w and "start" in w and "end" in w]
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"Found {len(words)} words in result.words\n")
+            
+            # 4. Chunks formatı
+            elif "chunks" in data:
+                for chunk in data["chunks"]:
+                    if "words" in chunk:
+                        chunk_words = [w for w in chunk["words"] 
+                                      if "word" in w and "start" in w and "end" in w]
+                        words.extend(chunk_words)
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"Found {len(words)} words in chunks\n")
+            
+            # 5. Whisper OpenAI'nin yeni API yanıt formatı
+            elif "text" in data and "duration" in data:
+                if "words" in data:
+                    # Bazı Whisper yanıtları farklı formatta "words" içerebilir
+                    try:
+                        with open(log_path, "a", encoding="utf-8") as log:
+                            log.write(f"Checking special words format: {type(data['words'])}\n")
+                            if isinstance(data['words'], list) and len(data['words']) > 0:
+                                sample = data['words'][0]
+                                log.write(f"Sample entry: {sample}\n")
+                                if isinstance(sample, dict):
+                                    log.write(f"Sample keys: {list(sample.keys())}\n")
+                    except Exception as e:
+                        with open(log_path, "a", encoding="utf-8") as log:
+                            log.write(f"Error examining words: {str(e)}\n")
+                            
+                # Kelimeler bulunamadıysa, metni manuel bölümleme dene
+                if not words and "text" in data:
+                    text = data["text"]
+                    # Metni boşluklarla ayır ve her kelimeye eşit zaman ata
+                    duration = float(data.get("duration", 30))
+                    manual_words = text.split()
+                    word_duration = duration / len(manual_words) if manual_words else 0
                     
-                    if words:
-                        timings.append({"text": data.get("text", ""), "words": words})
-                else:
-                    print(f"Geçersiz zamanlama formatı: {timing_file}")
+                    start_time = 0.0
+                    for word in manual_words:
+                        word_len = len(word) / 4  # Uzunluğa göre yaklaşık süre (4 harf = 1 saniye)
+                        word_time = max(0.3, min(2.0, word_len))  # Min 0.3, maks 2 saniye
+                        words.append({
+                            "word": word,
+                            "start": start_time,
+                            "end": start_time + word_time
+                        })
+                        start_time += word_time
+                    
+                    with open(log_path, "a", encoding="utf-8") as log:
+                        log.write(f"Created {len(words)} manual word timings from text\n")
+            
+            if words:
+                # Geçerli kelime zamanlamaları bulundu
+                return [{"text": data.get("text", ""), "words": words}]
+            else:
+                # Zamanlamalar bulunamadı, hata ayıklama bilgisi ekle
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write("No valid word timing data found in structure\n")
+                    log.write(f"Keys in data: {list(data.keys())}\n")
+                    
+                    # Mevcut ise, segment yapısından örnek yazdır
+                    if "segments" in data and data["segments"]:
+                        first_segment = data["segments"][0]
+                        log.write(f"First segment keys: {list(first_segment.keys())}\n")
+                        if "words" in first_segment and first_segment["words"]:
+                            log.write(f"First word in segment: {first_segment['words'][0]}\n")
+                    
+                    # Kelime zamanlamaları oluşturulamadığı için son çare olarak yalnızca cümleleri kullan
+                    text = data.get("text", "")
+                    if text:
+                        sentences = [s.strip() for s in text.split('.') if s.strip()]
+                        log.write(f"Falling back to {len(sentences)} sentences without word timings\n")
+                        
+                        # Her cümle için manuel zamanlama yap
+                        manual_timings = []
+                        duration = float(data.get("duration", 30))
+                        sentence_time = duration / len(sentences) if sentences else 0
+                        
+                        start_time = 0.0
+                        for sentence in sentences:
+                            words = sentence.split()
+                            if not words:
+                                continue
+                                
+                            word_time = sentence_time / len(words)
+                            sentence_words = []
+                            
+                            for word in words:
+                                sentence_words.append({
+                                    "word": word,
+                                    "start": start_time,
+                                    "end": start_time + word_time
+                                })
+                                start_time += word_time
+                            
+                            manual_timings.append({"text": sentence, "words": sentence_words})
+                        
+                        return manual_timings
+                
         except Exception as e:
-            print(f"Zamanlama dosyası yükleme hatası: {str(e)}")
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Error parsing timing JSON: {str(e)}\n")
+                
+    else:
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"Timing file not found: {full_timing_path}\n")
     
     return timings
 
-def create_word_level_srt(sentences: List[str], timings: List[Dict[str, Any]], output_path: str) -> bool:
+def create_subtitle_files(timings: List[Dict[str, Any]], project_folder: str, video_path: str = None) -> Dict[str, str]:
+    """Create word-based SRT and ASS subtitle files"""
+    srt_path = os.path.join(project_folder, "subtitles.srt")
+    ass_path = os.path.join(project_folder, "subtitles.ass")
+    log_path = os.path.join(project_folder, "subtitle_log.txt")
+    
+    all_words = []
+    cumulative_time = 0.0
+    
+    for timing_data in timings:
+        if "words" in timing_data:
+            audio_duration = timing_data["words"][-1]["end"] if timing_data["words"] else 0
+            for word in timing_data["words"]:
+                all_words.append({
+                    "word": word["word"].strip(),
+                    "start": word["start"] + cumulative_time,
+                    "end": word["end"] + cumulative_time
+                })
+            cumulative_time += audio_duration + 0.1
+    
+    # Write SRT file
+    with open(srt_path, "w", encoding="utf-8") as srt_file, open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"Creating SRT: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        
+        # SRT için daha iyi stiller
+        for i, word in enumerate(all_words, 1):
+            start = word["start"]
+            end = min(word["end"] + 0.05, 
+                     all_words[i]["start"] - 0.01 if i < len(all_words) else word["end"] + 0.05)
+            if end - start < 0.15:
+                end = start + 0.15
+                
+            # Kelime uzunluğuna göre font boyutu - daha görünür olması için her kelime büyük boyutta
+            font_size = "18" if len(word["word"]) <= 6 else "15" if len(word["word"]) <= 10 else "12"
+            
+            # SRT dosyasına yaz - gelişmiş stil etiketi
+            srt_file.write(f"{i}\n")
+            srt_file.write(f"{format_srt_time(start)} --> {format_srt_time(end)}\n")
+            
+            # Daha iyi görünürlük için stil ekle - merkeze hizalı ve arka plan renkli
+            srt_file.write(f'<font size="{font_size}" color="white"><b>{word["word"]}</b></font>\n\n')
+    
+    # Write ASS file (FFmpeg'in subtitles filtresi SRT'yi doğru işleyemediğinde ASS kullanılabilir)
+    ass_header = """[Script Info]
+Title: Word-based Subtitles
+ScriptType: v4.00+
+WrapStyle: 0
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,24,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,1,2,10,10,50,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    
+    with open(ass_path, "w", encoding="utf-8") as ass_file, open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"Creating ASS: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        ass_file.write(ass_header)
+        
+        # ASS dosyasına kelimeleri tek tek ekle - daha iyi görünüm için stil iyileştirmeleri
+        for i, word in enumerate(all_words):
+            start = format_ass_time(word["start"])
+            end = format_ass_time(min(word["end"] + 0.05, 
+                                    all_words[i+1]["start"] - 0.01 if i + 1 < len(all_words) else word["end"] + 0.1))
+            if format_ass_time(word["end"]) == start:
+                end = format_ass_time(word["start"] + 0.15)
+                
+            # Özel karakterleri escape et
+            text = word["word"].replace("{", "\\{").replace("}", "\\}")
+            
+            # Arka plan rengi ve kalın yazı tipi ile daha iyi görünürlük
+            styled_text = f"{{\\b1\\fs24\\c&HFFFFFF&\\3c&H000000&\\4c&H000000&}}{text}{{\\b0}}"
+            ass_file.write(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{styled_text}\n")
+    
+    # Harici altyazı dosyaları oluşturma - video_path varsa
+    if video_path:
+        try:
+            video_dir = os.path.dirname(video_path)
+            ext_srt_path = os.path.join(video_dir, "subtitles.srt")
+            ext_ass_path = os.path.join(video_dir, "subtitles.ass")
+            shutil.copy2(srt_path, ext_srt_path)
+            shutil.copy2(ass_path, ext_ass_path)
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"External subtitle files created in {video_dir}\n")
+        except Exception as e:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Error creating external subtitle files: {str(e)}\n")
+    
+    return {"srt": srt_path, "ass": ass_path}
+
+def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, Any]], project_folder: str, 
+                   subtitle_language: str = "tr", content_language: str = "tr", openai_api_key: str = None, 
+                   font_path: str = None) -> str:
     """
-    Kelime seviyesinde zamanlamalara sahip SRT dosyası oluşturur
+    Renders subtitles onto a video
+    Args:
+        video_path (str): path to the video file
+        lines (List[str]): list of lines to render
+        timings (List[Dict[str, Any]]): list of word timings from whisper API
+        project_folder (str): path to the project folder
+        subtitle_language (str, optional): language code for subtitles. Defaults to "tr".
+        content_language (str, optional): language code for content. Defaults to "tr".
+        openai_api_key (str, optional): OpenAI API key for potential translation. Defaults to None.
+        font_path (str, optional): Path to font file. Defaults to None.
+
+    Returns:
+        str: path to the output video file
+    """
+    
+    # Altyazı dili değişkenini global olarak tanımla (diğer fonksiyonlar için)
+    globals()['subtitle_language'] = subtitle_language
+    
+    # Sonuç yolunu belirle
+    output_video_path = os.path.join(project_folder, "video_with_subtitles.mp4")
+    timings_json_path = os.path.join(project_folder, "word_timings.json")
+    
+    # TTS klasöründe full_timing.json var mı kontrol et, varsa word_timings.json olarak kopyala
+    tts_folder = os.path.join(project_folder, "tts_audio")
+    full_timing_path = os.path.join(tts_folder, "full_timing.json")
+    if os.path.exists(full_timing_path) and not os.path.exists(timings_json_path):
+        with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+            log.write(f"Copying {full_timing_path} to {timings_json_path}\n")
+        try:
+            shutil.copy2(full_timing_path, timings_json_path)
+        except Exception as e:
+            with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+                log.write(f"Error copying timing file: {str(e)}\n")
+    
+    # Kelime zamanlamaları JSON dosyasının varlığını kontrol et
+    if os.path.exists(timings_json_path):
+        # Doğrudan helper fonksiyonu kullan
+        success = create_word_by_word_video(
+            video_path=video_path,
+            timings_json_path=timings_json_path,
+            output_path=output_video_path,
+            ffmpeg_path=r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"
+        )
+        
+        # Başarılı ise direkt dön
+        if success:
+            return output_video_path
+    
+    # Önceki yöntemlerle devam et
+    logging.info(f"Starting subtitle process for video: {video_path}")
+    logging.info(f"Project folder: {project_folder}")
+    
+    ffmpeg_path = r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"  # FFmpeg yolu
+    
+    if not timings:
+        with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+            log.write("No timings found, copying original video\n")
+        shutil.copy2(video_path, output_video_path)
+        return output_video_path
+    
+    # Eğer timings varsa ama JSON dosyası oluşturulmadıysa, JSON dosyasını oluştur
+    if not os.path.exists(timings_json_path) and timings:
+        with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+            log.write("Creating word_timings.json from provided timings\n")
+        try:
+            with open(timings_json_path, "w", encoding="utf-8") as f:
+                json_data = {"duration": 0, "language": subtitle_language, "words": []}
+                
+                # Eğer timings içinde words varsa
+                all_words = []
+                for timing_data in timings:
+                    if "words" in timing_data:
+                        all_words.extend(timing_data["words"])
+                        if "text" in timing_data and not json_data.get("text"):
+                            json_data["text"] = timing_data["text"]
+                
+                if all_words:
+                    json_data["words"] = all_words
+                    # En son kelimenin bitiş zamanını duration olarak kullan
+                    if all_words[-1].get("end"):
+                        json_data["duration"] = all_words[-1]["end"]
+                else:
+                    # Eğer kelimeler yoksa basit bir zamanlamalar dizisi oluştur
+                    text = " ".join([line for line in lines if line and isinstance(line, str)])
+                    json_data["text"] = text
+                    word_list = text.split()
+                    total_duration = 30.0  # varsayılan 30 saniye
+                    word_time = total_duration / len(word_list) if word_list else 0.5
+                    
+                    start_time = 0.0
+                    for word in word_list:
+                        # Kelime uzunluğuna göre süre ayarla
+                        word_len = len(word) / 4  # Uzunluğa göre yaklaşık süre (4 harf = 1 saniye)
+                        word_duration = max(0.3, min(2.0, word_len))  # Min 0.3, maks 2 saniye
+                        
+                        json_data["words"].append({
+                            "word": word,
+                            "start": start_time,
+                            "end": start_time + word_duration
+                        })
+                        start_time += word_duration
+                    
+                    json_data["duration"] = start_time
+                
+                json.dump(json_data, f, indent=2)
+                
+                # JSON dosyası oluşturulduktan sonra tekrar word-by-word video fonksiyonunu çağır
+                success = create_word_by_word_video(
+                    video_path=video_path,
+                    timings_json_path=timings_json_path,
+                    output_path=output_video_path,
+                    ffmpeg_path=r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"
+                )
+                
+                if success:
+                    return output_video_path
+                        
+        except Exception as e:
+            with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+                log.write(f"Error creating word_timings.json: {str(e)}\n")
+    
+    # video_path parametresini ileterek subtitle_files oluştur
+    subtitle_files = create_subtitle_files(timings, project_folder, video_path)
+    
+    # Altyazıları yerleştirmek için çeşitli yöntemler deneyelim
+    with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+        # Windows yollarını FFmpeg için güvenli hale getir
+        video_dir = os.path.dirname(video_path)
+        ext_srt_path = os.path.join(video_dir, "subtitles.srt")
+        ext_ass_path = os.path.join(video_dir, "subtitles.ass")
+        
+        # FFmpeg için yolları güvenli hale getir (Windows'ta çift ters slash gerekiyor)
+        safe_video_path = video_path.replace("\\", "\\\\").replace(":", "\\:")
+        safe_srt_path = ext_srt_path.replace("\\", "\\\\").replace(":", "\\:")
+        
+        log.write(f"Using safe paths for FFmpeg:\n")
+        log.write(f"Video: {safe_video_path}\n")
+        log.write(f"SRT: {safe_srt_path}\n")
+        
+        # 0. Yeni deneme: mp4box ile altyazı ekleme (daha yüksek uyumluluk)
+        try:
+            mp4box_path = os.path.join(os.path.dirname(ffmpeg_path), "mp4box.exe")
+            if os.path.exists(mp4box_path):
+                # Önce videoyu kopyala
+                shutil.copy2(video_path, output_video_path)
+                
+                # MP4Box komutu oluştur
+                mp4box_cmd = f'"{mp4box_path}" -add "{ext_srt_path}":lang={subtitle_language}:name="Subtitles" "{output_video_path}"'
+                log.write(f"MP4Box command: {mp4box_cmd}\n")
+                
+                # Komutu çalıştır
+                result = subprocess.run(mp4box_cmd, shell=True, capture_output=True, text=True)
+                log.write(f"MP4Box stderr: {result.stderr}\n")
+                
+                if result.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+                    log.write("Subtitles added successfully with MP4Box\n")
+                    return output_video_path
+            else:
+                log.write(f"MP4Box not found at {mp4box_path}\n")
+        except Exception as e:
+            log.write(f"MP4Box error: {str(e)}\n")
+                
+        # 1. Deneme: Muxing - altyazıyı video konteynerine ekle
+        mux_cmd = [
+            ffmpeg_path, "-y", "-i", video_path, "-i", ext_srt_path,
+            "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text",
+            "-metadata:s:s:0", f"language={subtitle_language}",
+            output_video_path
+        ]
+        log.write(f"Running FFmpeg muxing command: {' '.join(mux_cmd)}\n")
+        result = subprocess.run(mux_cmd, capture_output=True, text=True)
+        log.write(f"Muxing stderr: {result.stderr}\n")
+        
+        if result.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+            log.write("Subtitles added successfully as external track\n")
+            return output_video_path
+
+        # 2. Deneme: Subtitles filtresi ile shell komut kullanarak (manuel saf shell komutu)
+        try:
+            # Basit shell komutu, subtitles filtresini her türlü encoding probleminden uzak tutar
+            shell_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf subtitles=subtitles.srt:force_style="FontSize=18,Alignment=2,BorderStyle=4,Outline=2,Shadow=1,MarginV=20" -c:v libx264 -c:a copy "{output_video_path}"'
+            
+            log.write(f"Running direct shell command with relative path: {shell_cmd}\n")
+            
+            # İşlemi başlat - çalışma dizinini altyazı dosyasıyla aynı yap
+            process = subprocess.Popen(
+                shell_cmd, 
+                shell=True,
+                cwd=video_dir,  # Çalışma dizinini değiştir - subtitles.srt buradadır
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # İşlemi bekle ve çıktıları al
+            stdout, stderr = process.communicate()
+            log.write(f"Shell stderr: {stderr.decode('utf-8', errors='ignore')}\n")
+            
+            if process.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+                log.write("Subtitles added successfully with shell command and relative path\n")
+                return output_video_path
+                
+        except Exception as e:
+            log.write(f"Shell command error: {str(e)}\n")
+        
+        # 3. Basit SRT yöntemi - minimum FFmpeg filtresi kullanarak
+        try:
+            # Önce, çalışma dizininde basitleştirilmiş bir SRT dosyası oluştur
+            simple_srt_path = os.path.join(video_dir, "simple.srt")
+            with open(simple_srt_path, "w", encoding="utf-8") as simple_srt:
+                # Basit bir SRT dosyası oluştur - tüm içerik tek bir altyazı olarak
+                if timings and "text" in timings[0]:
+                    text = timings[0]["text"]
+                    simple_srt.write("1\n")
+                    simple_srt.write("00:00:01,000 --> 00:00:30,000\n")
+                    simple_srt.write(f"{text}\n\n")
+                    log.write(f"Created simple SRT with single subtitle\n")
+            
+            # FFmpeg komutu oluştur - çok basit sadece bir filtreyle
+            simple_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf subtitles=simple.srt -c:v libx264 -c:a copy "{output_video_path}"'
+            log.write(f"Running simple SRT command: {simple_cmd}\n")
+            
+            # Komutu çalıştır
+            process = subprocess.Popen(
+                simple_cmd, 
+                shell=True,
+                cwd=video_dir,  # Çalışma dizinini değiştir
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            # İşlemi bekle ve çıktıları al
+            stdout, stderr = process.communicate()
+            log.write(f"Simple SRT stderr: {stderr.decode('utf-8', errors='ignore')}\n")
+            
+            if process.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+                log.write("Subtitles added successfully with simple SRT\n")
+                return output_video_path
+                
+        except Exception as e:
+            log.write(f"Simple SRT error: {str(e)}\n")
+            
+        # 4. Deneme: TEXT dosyası yöntemi - FFmpeg metin filtresi kullanarak
+        try:
+            # Önce, çalışma dizininde bir TEXT dosyası oluştur
+            text_file_path = os.path.join(video_dir, "subtitles.txt")
+            with open(text_file_path, "w", encoding="utf-8") as text_file:
+                # TEXT dosyasına metni yaz
+                if timings and "text" in timings[0]:
+                    text_file.write(timings[0]["text"])
+                    log.write(f"Created TEXT file with content\n")
+            
+            # FFmpeg komutu oluştur - drawtext filtresiyle
+            text_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "drawtext=fontfile=/Windows/Fonts/Arial.ttf:textfile=subtitles.txt:reload=1:fontcolor=white:fontsize=12:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=h-th-20" -c:v libx264 -c:a copy "{output_video_path}"'
+            log.write(f"Running TEXT file command: {text_cmd}\n")
+            
+            # Komutu çalıştır
+            process = subprocess.Popen(
+                text_cmd, 
+                shell=True,
+                cwd=video_dir,  # Çalışma dizinini değiştir
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            # İşlemi bekle ve çıktıları al
+            stdout, stderr = process.communicate()
+            log.write(f"TEXT file stderr: {stderr.decode('utf-8', errors='ignore')}\n")
+            
+            if process.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+                log.write("Text overlay added successfully\n")
+                return output_video_path
+                
+        except Exception as e:
+            log.write(f"TEXT file error: {str(e)}\n")
+            
+        # 5. Deneme: Filter complex kullanarak dene ve force_style ekle
+        filter_complex_cmd = [
+            ffmpeg_path, "-y", "-i", video_path,
+            "-filter_complex", f"[0:v]subtitles={ext_srt_path}:force_style='FontSize=12,Alignment=2,MarginV=20'[v]", "-map", "[v]", "-map", "0:a",
+            "-c:v", "libx264", "-c:a", "copy", "-shortest",
+            output_video_path
+        ]
+        log.write(f"Filter complex command: {' '.join(filter_complex_cmd)}\n")
+        result = subprocess.run(filter_complex_cmd, capture_output=True, text=True)
+        log.write(f"Filter complex stderr: {result.stderr}\n")
+        
+        if result.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+            log.write("SRT subtitles added successfully with filter complex\n")
+            return output_video_path
+        
+        # 6. Alternatif: ASS formatını dene (bazı Windows sistemlerinde daha iyi çalışabilir)
+        ass_path = subtitle_files["ass"].replace("\\", "/")
+        ext_ass_path = os.path.join(os.path.dirname(video_path), "subtitles.ass")
+        shutil.copy2(subtitle_files["ass"], ext_ass_path)
+        
+        ass_cmd = [
+            ffmpeg_path, "-y", "-i", video_path,
+            "-vf", f"ass={ext_ass_path}",
+            "-c:v", "libx264", "-c:a", "copy", "-shortest",
+            output_video_path
+        ]
+        log.write(f"ASS command: {' '.join(ass_cmd)}\n")
+        result = subprocess.run(ass_cmd, capture_output=True, text=True)
+        log.write(f"ASS stderr: {result.stderr}\n")
+        
+        if result.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+            log.write("ASS subtitles added successfully\n")
+            return output_video_path
+        
+        # 7. Alternatif: ASS ile shell komutu
+        ass_shell_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "ass={ext_ass_path}" -c:v libx264 -c:a copy -shortest "{output_video_path}"'
+        log.write(f"ASS shell command: {ass_shell_cmd}\n")
+        result = subprocess.run(ass_shell_cmd, shell=True, capture_output=True, text=True)
+        log.write(f"ASS shell stderr: {result.stderr}\n")
+        
+        if result.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+            log.write("ASS subtitles added successfully with shell command\n")
+            return output_video_path
+        
+        # 8. Son çare: libass ile dene (genellikle daha iyi SRT desteği)
+        try:
+            log.write("Trying libass method\n")
+            # local_srt_path = os.path.join(os.path.dirname(video_path), "subtitles.srt")
+            # shutil.copy2(subtitle_files["srt"], local_srt_path)
+            
+            # Tam dosya adı olmadan, sadece dosya adını kullan - relative path
+            srt_filename = os.path.basename(ext_srt_path)
+            
+            # libass ile shell komutunu çalıştır
+            libass_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "subtitles={srt_filename}" -c:v libx264 -c:a copy "{output_video_path}"'
+            log.write(f"libass command: {libass_cmd}\n")
+            
+            # Komutu çalıştır
+            process = subprocess.Popen(
+                libass_cmd,
+                shell=True, 
+                cwd=os.path.dirname(video_path),  # Çalışma dizinini altyazı dosyasıyla aynı dizin yap
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            stdout, stderr = process.communicate()
+            log.write(f"libass stderr: {stderr.decode('utf-8', errors='ignore')}\n")
+            
+            if process.returncode == 0 and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+                log.write("Subtitles added successfully with libass\n")
+                return output_video_path
+        except Exception as e:
+            log.write(f"libass method failed: {str(e)}\n")
+        
+        # Tüm denemeler başarısız oldu, orijinal videoyu kopyala
+        log.write("All subtitle attempts failed, copying original video\n")
+        shutil.copy2(video_path, output_video_path)
+    
+    return output_video_path
+
+if __name__ == "__main__":
+    # Test usage
+    project_folder = r"C:\Users\pc\Desktop\MMoto\output\video_2025-04-10_00-45-21"
+    video_path = r"C:\Users\pc\Desktop\MMoto\output\video_2025-04-10_00-45-21\video_with_audio.mp4"
+    render_subtitles(video_path, ["test"], None, project_folder)
+
+# Ekstra: Altyazıları Word by Word eklemek için helper fonksiyon
+def create_word_by_word_video(video_path: str, timings_json_path: str = None, output_path: str = None, ffmpeg_path: str = None):
+    """
+    Kelime kelime altyazı ekleyen özel fonksiyon.
+    Bu fonksiyon, normal render_subtitles çalışmadığında doğrudan kullanılabilir.
     
     Args:
-        sentences (List[str]): Altyazı cümleleri
-        timings (List[Dict[str, Any]]): Kelime zamanlamaları
-        output_path (str): Çıktı SRT dosyasının yolu
-    
-    Returns:
-        bool: Başarılı ise True, değilse False
+        video_path (str): Giriş video dosyası
+        timings_json_path (str, optional): Kelime zamanlamalarını içeren JSON dosyası. None ise otomatik bulunur.
+        output_path (str, optional): Çıkış video dosyası. None ise otomatik oluşturulur.
+        ffmpeg_path (str, optional): FFmpeg yolu (None ise varsayılan kullanılır)
     """
+    # FFmpeg yolunu ayarla
+    if ffmpeg_path is None:
+        ffmpeg_path = r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"
+    
+    # Proje klasörünü bul
+    if video_path:
+        project_folder = os.path.dirname(video_path)
+    else:
+        raise ValueError("Video path must be provided")
+    
+    # Çıkış yolunu ayarla
+    if output_path is None:
+        output_path = os.path.join(project_folder, "video_with_subtitles.mp4")
+    
+    # JSON yolunu ayarla
+    if timings_json_path is None:
+        # Olası JSON dosya yollarını kontrol et
+        possible_paths = [
+            os.path.join(project_folder, "word_timings.json"),
+            os.path.join(project_folder, "tts_audio", "full_timing.json"),
+            os.path.join(project_folder, "tts_audio", "timing.json"),
+            os.path.join(project_folder, "timing.json")
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                timings_json_path = path
+                break
+        
+        if timings_json_path is None:
+            print("JSON dosyası bulunamadı, fonksiyon işlemi iptal edildi")
+            return False
+    
+    # Log dosyasını hazırla
+    log_path = os.path.join(project_folder, "subtitle_log.txt")
+    with open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"Word by word subtitling started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log.write(f"Using timings file: {timings_json_path}\n")
+    
+    # JSON dosyasını yükle
     try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            subtitle_index = 1
-            cumulative_time = 0.0  # Kümülatif zaman
-            last_subtitle_end = 0.0  # Son altyazının bitiş zamanı
-            
-            # Önce ses dosyalarının sürelerini hesapla
-            audio_durations = []
-            for timing_data in timings:
-                if "words" not in timing_data or not timing_data["words"]:
-                    audio_durations.append(0.0)
-                    continue
-                
-                words = timing_data["words"]
-                if not words:
-                    audio_durations.append(0.0)
-                    continue
-                
-                # Son kelimenin bitiş zamanını al
-                last_word = words[-1]
-                if "end" in last_word:
-                    audio_durations.append(last_word["end"])
-                else:
-                    audio_durations.append(0.0)
-            
-            # Her ses dosyası için altyazıları oluştur
-            for i, timing_data in enumerate(timings):
-                if "words" not in timing_data or not timing_data["words"]:
-                    cumulative_time += audio_durations[i] + 0.2  # Ses dosyası arasında boşluk bırak (0.2 saniye)
-                    continue
-                
-                words = timing_data["words"]
-                if not words:
-                    cumulative_time += audio_durations[i] + 0.2
-                    continue
-                
-                # Cümle başlangıç ve bitiş zamanlarını belirle
-                sentence_start = words[0]["start"] + cumulative_time if "start" in words[0] else cumulative_time
-                sentence_end = words[-1]["end"] + cumulative_time if "end" in words[-1] else cumulative_time + audio_durations[i]
-                
-                # Kelimeleri daha akıllı bir şekilde grupla
-                word_groups = []
-                current_group = []
-                current_group_word_count = 0
-                max_words_per_group = 7  # Bir grupta maksimum kelime sayısı
-                
-                # Noktalama işaretleri ve bağlaçlar
-                end_punctuation = ['.', '!', '?']  # Cümle sonu noktalama işaretleri
-                mid_punctuation = [',', ';', ':']  # Cümle içi noktalama işaretleri
-                conjunctions = ["ve", "veya", "ile", "ya", "ama", "fakat", "ancak", "çünkü", "bu", "şu", "o"]  # Bağlaçlar
-                
-                for j, word_info in enumerate(words):
-                    if "word" not in word_info or "start" not in word_info or "end" not in word_info:
-                        continue
-                    
-                    # Kelime bilgisini kopyala ve kümülatif zamanı ekle
-                    adjusted_word_info = word_info.copy()
-                    adjusted_word_info["start"] = word_info["start"] + cumulative_time
-                    adjusted_word_info["end"] = word_info["end"] + cumulative_time
-                    
-                    # Kelimeyi gruba ekle
-                    current_group.append(adjusted_word_info)
-                    current_group_word_count += 1
-                    
-                    # Grup sonlandırma koşulları
-                    word = word_info["word"].strip()
-                    is_last_word = j == len(words) - 1
-                    
-                    # Cümle sonu noktalama işaretlerinde her zaman grup sonlandır
-                    if any(word.endswith(p) for p in end_punctuation) or is_last_word:
-                        word_groups.append(current_group)
-                        current_group = []
-                        current_group_word_count = 0
-                    # Cümle içi noktalama işaretlerinde, grup yeterince uzunsa sonlandır
-                    elif any(word.endswith(p) for p in mid_punctuation) and current_group_word_count >= 3:
-                        word_groups.append(current_group)
-                        current_group = []
-                        current_group_word_count = 0
-                    # Maksimum kelime sayısına ulaşıldıysa ve sonraki kelime bağlaç değilse grup sonlandır
-                    elif current_group_word_count >= max_words_per_group:
-                        # Sonraki kelimeye bak
-                        if j + 1 < len(words) and words[j + 1]["word"].strip().lower() not in conjunctions:
-                            word_groups.append(current_group)
-                            current_group = []
-                            current_group_word_count = 0
-                
-                # Son grubu ekle
-                if current_group:
-                    word_groups.append(current_group)
-                
-                # Her grup için altyazı oluştur
-                for group in word_groups:
-                    if not group:
-                        continue
-                    
-                    start_time = group[0]["start"]
-                    end_time = group[-1]["end"]
-                    
-                    # Çakışan zamanları önle - önceki altyazının bitiş zamanından sonra başlat
-                    if start_time < last_subtitle_end + 0.2:  # 0.2 saniyelik güvenlik boşluğu
-                        start_time = last_subtitle_end + 0.2
-                    
-                    # Kelime sayısına göre minimum süre hesapla
-                    word_count = len(group)
-                    min_duration = max(1.0, word_count * 0.3)  # En az 1 saniye veya kelime başına 0.3 saniye
-                    
-                    # Minimum süre kontrolü
-                    if end_time - start_time < min_duration:
-                        end_time = start_time + min_duration
-                    
-                    # Grup metnini oluştur
-                    text = " ".join([w["word"] for w in group])
-                    
-                    # SRT girişi ekle
-                    f.write(f"{subtitle_index}\n")
-                    f.write(f"{format_srt_time(start_time)} --> {format_srt_time(end_time)}\n")
-                    f.write(f"{text}\n\n")
-                    
-                    # Son altyazının bitiş zamanını güncelle
-                    last_subtitle_end = end_time
-                    subtitle_index += 1
-                
-                # Bir sonraki ses dosyası için kümülatif zamanı güncelle
-                # Ses dosyası arasında daha büyük bir boşluk bırak (0.2 saniye)
-                cumulative_time += audio_durations[i] + 0.2
-            
-        return True
+        with open(timings_json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Successfully loaded JSON data with keys: {list(data.keys())}\n")
     except Exception as e:
-        print(f"Kelime seviyesinde SRT oluşturma hatası: {str(e)}")
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"JSON yükleme hatası: {str(e)}\n")
+        return False
+    
+    # Kelime zamanlamalarını çıkar
+    words = []
+    
+    # 1. Düz 'words' dizisi formatını kontrol et
+    if "words" in data and isinstance(data["words"], list):
+        words = [w for w in data["words"] if "word" in w and "start" in w and "end" in w]
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"Found {len(words)} words in direct 'words' field\n")
+    
+    # 2. 'segments' formatını kontrol et
+    elif "segments" in data and isinstance(data["segments"], list):
+        for segment in data["segments"]:
+            if "words" in segment:
+                segment_words = [w for w in segment["words"] if "word" in w and "start" in w and "end" in w]
+                words.extend(segment_words)
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"Found {len(words)} words in 'segments' field\n")
+    
+    # Kelimeler bulunamazsa çık
+    if not words:
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write("JSON dosyasında kelime zamanlamaları bulunamadı\n")
+        return False
+    
+    # Geçici SRT dosyası oluştur
+    srt_path = os.path.join(project_folder, "word_by_word.srt")
+    with open(srt_path, "w", encoding="utf-8") as srt_file, open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"Creating SRT file at {srt_path}\n")
+        for i, word in enumerate(words, 1):
+            # SRT formatına dönüştür
+            start = format_srt_time(word["start"])
+            end = format_srt_time(word["end"])
+            text = word["word"].strip()
+            
+            # Büyük fontlu, beyaz yazı, siyah arka plan
+            styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
+            
+            # SRT girişini yaz
+            srt_file.write(f"{i}\n")
+            srt_file.write(f"{start} --> {end}\n")
+            srt_file.write(f"{styled_text}\n\n")
+        
+        log.write(f"Added {len(words)} words to SRT file\n")
+    
+    # Altyazılı videoyu oluştur - relative path kullanarak
+    srt_file_name = os.path.basename(srt_path)
+    cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf subtitles={srt_file_name} -c:v libx264 -c:a copy "{output_path}"'
+    
+    with open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"Running FFmpeg command: {cmd}\n")
+    
+    # Çalışma dizini değiştirerek çalıştır
+    try:
+        process = subprocess.Popen(
+            cmd,
+            shell=True,
+            cwd=project_folder,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, stderr = process.communicate()
+        
+        if process.returncode == 0 and os.path.exists(output_path):
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Kelime kelime altyazılı video başarıyla oluşturuldu: {output_path}\n")
+            return True
+        else:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"FFmpeg hatası: {stderr.decode('utf-8', errors='ignore')}\n")
+            return False
+    except Exception as e:
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"İşlem hatası: {str(e)}\n")
         return False

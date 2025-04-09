@@ -85,18 +85,102 @@ def analyze_audio_with_whisper(audio_path: str, api_key: str) -> Dict[str, Any]:
         client = OpenAI(api_key=api_key)
         
         with open(audio_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                file=audio_file,
-                model="whisper-1",
-                response_format="verbose_json",
-                timestamp_granularities=["word"]
-            )
+            # Güncellenmiş parametrelerle API çağrısı yap
+            try:
+                # Eski Whisper API (pre-v1) için deneme
+                transcript = client.audio.transcriptions.create(
+                    file=audio_file,
+                    model="whisper-1",
+                    response_format="verbose_json",
+                    timestamp_granularities=["word"]
+                )
+                
+                # Bu noktaya gelinirse, çağrı başarılıydı
+                print("Whisper API (new format) call successful")
+                
+                # TranscriptionVerbose nesnesini dict'e dönüştür
+                if hasattr(transcript, "model_dump"):
+                    # Pydantic v2 için
+                    transcript_dict = transcript.model_dump()
+                elif hasattr(transcript, "dict"):
+                    # Pydantic v1 için
+                    transcript_dict = transcript.dict()
+                else:
+                    # Nesne zaten dict ise
+                    transcript_dict = dict(transcript)
+                
+                return transcript_dict
+            except Exception as e:
+                # Yeni format başarısız olursa, alternatif format dene
+                print(f"New Whisper API format error: {str(e)}")
+                print("Trying with alternative format...")
+                
+                # Dosyayı tekrar aç
+                audio_file.seek(0)
+                try:
+                    # Farklı parametrelerle tekrar dene
+                    transcript = client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="whisper-1",
+                        response_format="verbose_json"  # timestamp_granularities olmadan dene
+                    )
+                    
+                    # Bu formatta kelime zamanlamaları olmayabilir, manuel olarak oluşturulacak
+                    print("Alternative Whisper API call successful (may not have word timings)")
+                    
+                    # TranscriptionVerbose nesnesini dict'e dönüştür
+                    if hasattr(transcript, "model_dump"):
+                        transcript_dict = transcript.model_dump()
+                    elif hasattr(transcript, "dict"):
+                        transcript_dict = transcript.dict()
+                    else:
+                        transcript_dict = dict(transcript)
+                    
+                    return transcript_dict
+                except Exception as alt_error:
+                    # İkinci deneme de başarısız olursa, elle özel format oluştur
+                    print(f"Alternative Whisper API format error: {str(alt_error)}")
+                    print("Creating manual transcript object...")
+                    
+                    # Dosyayı tekrar aç
+                    audio_file.seek(0)
+                    
+                    # En basit formatta sesi metne çevir
+                    basic_transcript = client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="whisper-1",
+                        response_format="text"
+                    )
+                    
+                    # Metin döndüyse, manuel bir kelime-zamanlama yapısı oluştur
+                    if basic_transcript:
+                        text = str(basic_transcript)
+                        
+                        # FFmpeg ile ses dosyasının süresini öğren
+                        try:
+                            import subprocess
+                            ffprobe_cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_path}"'
+                            result = subprocess.run(ffprobe_cmd, shell=True, capture_output=True, text=True)
+                            duration = float(result.stdout.strip())
+                        except Exception:
+                            # Süre alınamazsa yaklaşık bir değer kullan
+                            duration = 30.0  # Varsayılan 30 saniye
+                        
+                        # Manuel yapı oluştur (daha sonra subtitle_renderer.py'da işlenecek)
+                        manual_transcript = {
+                            "text": text,
+                            "duration": duration,
+                            "language": "tr",  # Varsayılan dil
+                            "_manual": True    # Manuel oluşturulduğunu belirt
+                        }
+                        
+                        return manual_transcript
         
-        # JSON formatında sonucu döndür
-        return transcript
+        # Tüm denemeler başarısız olursa boş bir yanıt döndür
+        return {"error": "Failed to transcribe audio with Whisper API"}
     except Exception as e:
         print(f"Whisper analiz hatası: {str(e)}")
-        return {"error": str(e)}
+        return {"error": str(e), "text": "", "duration": 0, "language": "tr"}
 
 def save_word_timings(transcript: Dict[str, Any], output_path: str) -> bool:
     """
