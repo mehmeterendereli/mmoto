@@ -117,6 +117,9 @@ class MMotoApp(ctk.CTk):
         self.content_language_var = ctk.StringVar(value=DEFAULT_CONTENT_LANGUAGE) 
         self.subtitle_language_var = ctk.StringVar(value=DEFAULT_SUBTITLE_LANGUAGE)
         
+        # TTS ses modeli değişkeni
+        self.tts_voice_var = ctk.StringVar(value="onyx")  # Varsayılan ses: onyx
+        
         # Geriye dönük uyumluluk için eski language_var'ı ui_language_var'a bağla
         self.language_var = self.ui_language_var
         
@@ -547,6 +550,21 @@ class MMotoApp(ctk.CTk):
         )
         self.subtitle_lang_dropdown.grid(row=2, column=1, padx=20, pady=15, sticky="w")
         
+        # TTS ses modeli ayarları
+        tts_voice_label = ctk.CTkLabel(settings_content, text=_("tts_voice_model"))
+        tts_voice_label.grid(row=3, column=0, padx=20, pady=15, sticky="w")
+        
+        # TTS modelleri listesi
+        tts_voice_options = ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "coral", "sage", "ballad"]
+        
+        # TTS ses modeli dropdown
+        self.tts_voice_dropdown = ctk.CTkOptionMenu(
+            settings_content,
+            values=tts_voice_options,
+            command=self.on_tts_voice_select
+        )
+        self.tts_voice_dropdown.grid(row=3, column=1, padx=20, pady=15, sticky="w")
+        
         # Dropdown'ların başlangıç değerlerini ayarla
         self.update_language_dropdowns()
         
@@ -598,6 +616,10 @@ class MMotoApp(ctk.CTk):
                 
             if hasattr(self, 'subtitle_lang_dropdown'):
                 self.subtitle_lang_dropdown.set(subtitle_lang_name)
+            
+            # TTS ses modeli dropdown'unu güncelle
+            if hasattr(self, 'tts_voice_dropdown'):
+                self.tts_voice_dropdown.set(self.tts_voice_var.get())
                 
         except Exception as e:
             self.add_log(f"Dil dropdown güncelleme hatası: {str(e)}")
@@ -675,6 +697,27 @@ class MMotoApp(ctk.CTk):
         except Exception as e:
             self.add_log(f"Dil değiştirme hatası: {str(e)}")
             
+    def on_tts_voice_select(self, selected_voice):
+        """TTS ses modeli seçimi değiştiğinde çağrılır"""
+        try:
+            # Yeni değeri ayarla
+            old_voice = self.tts_voice_var.get()
+            self.tts_voice_var.set(selected_voice)
+            self.add_log(f"TTS ses modeli değiştirildi: {old_voice} -> {selected_voice}")
+            
+            # Config dosyasına kaydet
+            try:
+                config = self.load_config(silent=True)
+                config["default_tts_voice"] = selected_voice
+                with open("config.json", "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+                self.add_log(f"TTS ses modeli config.json'a kaydedildi: {selected_voice}")
+            except Exception as save_error:
+                self.add_log(f"Config kaydetme hatası: {str(save_error)}")
+                
+        except Exception as e:
+            self.add_log(f"TTS ses modeli değiştirme hatası: {str(e)}")
+            
     def load_config(self, silent=False):
         """Config dosyasını yükler ve uygulamaya uygular"""
         try:
@@ -708,6 +751,9 @@ class MMotoApp(ctk.CTk):
                     content_lang = config.get("content_language", DEFAULT_CONTENT_LANGUAGE)
                     subtitle_lang = config.get("subtitle_language", DEFAULT_SUBTITLE_LANGUAGE)
                     
+                    # TTS ses modeli ayarını yükle
+                    tts_voice = config.get("default_tts_voice", "onyx")
+                    
                     # Sadece config dosyasındaki değerlerden farklı ise güncelle
                     # Bu, dil değişim döngüsünü önlemek için önemli
                     if not silent:
@@ -722,11 +768,16 @@ class MMotoApp(ctk.CTk):
                         # Altyazı dili değişkenini güncelle
                         if subtitle_lang != self.subtitle_language_var.get():
                             self.subtitle_language_var.set(subtitle_lang)
+                        
+                        # TTS ses modeli değişkenini güncelle
+                        if tts_voice != self.tts_voice_var.get():
+                            self.tts_voice_var.set(tts_voice)
                     
                     if not silent:
                         # Yüklenen değerlerle ilgili mesaj
                         self.add_log(f"Ayarlar dosyadan yüklendi")
                         self.add_log(f"Dil ayarları: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
+                        self.add_log(f"TTS ses modeli: {tts_voice}")
                         if hasattr(self, 'video_source_var'):
                             self.add_log(f"Video kaynağı: {self.video_source_var.get()}")
                         # Arayüz dilini ayarla
@@ -902,16 +953,19 @@ class MMotoApp(ctk.CTk):
         return datetime.now().strftime("%H:%M:%S")
 
     def save_settings(self):
-        """Ayarları config.json dosyasına kaydeder"""
+        """Tüm ayarları config.json dosyasına kaydeder"""
         try:
             # Mevcut config dosyasını yükle
-            config = self.load_config()
+            config = self.load_config(silent=True)
             
             # Dil ayarlarını güncelle
             config["ui_language"] = self.ui_language_var.get()
-            config["content_language"] = self.content_language_var.get()
-            config["tts_language"] = self.content_language_var.get()  # TTS dili şimdilik içerik diliyle aynı
+            config["content_language"] = self.content_language_var.get() 
+            config["tts_language"] = self.content_language_var.get()  # TTS dili her zaman içerik dili ile aynı
             config["subtitle_language"] = self.subtitle_language_var.get()
+            
+            # TTS ses modeli ayarını güncelle
+            config["default_tts_voice"] = self.tts_voice_var.get()
             
             # Video kaynağı ayarını güncelle
             config["video_source"] = self.video_source_var.get()
@@ -928,6 +982,7 @@ class MMotoApp(ctk.CTk):
             self.add_log(f"Ayarlar kaydedildi. UI dili: {self.ui_language_var.get()}, "
                        f"İçerik dili: {self.content_language_var.get()}, "
                        f"Altyazı dili: {self.subtitle_language_var.get()}, "
+                       f"TTS ses modeli: {self.tts_voice_var.get()}, "
                        f"Video kaynağı: {self.video_source_var.get()}")
             
         except Exception as e:

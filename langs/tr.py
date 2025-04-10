@@ -36,6 +36,7 @@ LANG = {
     "tts_language": "Seslendirme Dili:",
     "subtitle_language": "Altyazı Dili:",
     "content_and_tts_language": "İçerik ve Seslendirme Dili:",
+    "tts_voice_model": "TTS Ses Modeli:",
     "content_language_info": "Seçilen arayüz dili sadece arayüzün dilini belirler ve videoları etkilemez. İçerik dili, videoların hangi dilde oluşturulacağını belirler. İçerik ve seslendirme dilleri genellikle aynı olmalıdır, ancak altyazı dilini farklı bir dilde seçebilirsiniz. Değişikliklerinizin etkili olması için lütfen 'Ayarları Kaydet' butonuna tıklayın.",
     "select_language": "Dil Seçin",
     

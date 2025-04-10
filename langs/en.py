@@ -36,7 +36,8 @@ LANG = {
     "tts_language": "TTS Language:",
     "subtitle_language": "Subtitle Language:",
     "content_and_tts_language": "Content and TTS Language:",
-    "content_language_info": "The selected interface language only determines the app interface and does not affect videos. Content language determines which language the videos will be created in. Content and TTS languages should typically be the same, but you can select a different subtitle language. Please click 'Save Settings' button for your changes to take effect.",
+    "tts_voice_model": "TTS Voice Model:",
+    "content_language_info": "The selected UI language only determines the language of the interface and does not affect the videos. The content language determines which language the videos will be created in. Content and TTS languages should generally be the same, but you can select a different language for subtitles. Please click the 'Save Settings' button for your changes to take effect.",
     "select_language": "Select Language",
     
     # Supported languages
