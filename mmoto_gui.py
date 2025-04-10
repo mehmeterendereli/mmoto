@@ -705,12 +705,23 @@ class MMotoApp(ctk.CTk):
             self.tts_voice_var.set(selected_voice)
             self.add_log(f"TTS ses modeli değiştirildi: {old_voice} -> {selected_voice}")
             
-            # Config dosyasına kaydet
+            # Config dosyasına kaydet - iki yöntemle de kaydedelim
             try:
+                # 1. Direkt config.json'a kaydetme
                 config = self.load_config(silent=True)
                 config["default_tts_voice"] = selected_voice
                 with open("config.json", "w", encoding="utf-8") as f:
                     json.dump(config, f, indent=2, ensure_ascii=False)
+                    
+                # 2. LanguageSwitcher üzerinden kaydetme (eğer içe aktarılabilirse)
+                try:
+                    from utils.language_switcher import LanguageSwitcher
+                    language_switcher = LanguageSwitcher()
+                    language_switcher.change_tts_voice(selected_voice)
+                except Exception as ls_error:
+                    # LanguageSwitcher kullanılamıyorsa hata kaydet, ama devam et
+                    print(f"LanguageSwitcher ile ses modeli değiştirme hatası: {str(ls_error)}")
+                
                 self.add_log(f"TTS ses modeli config.json'a kaydedildi: {selected_voice}")
             except Exception as save_error:
                 self.add_log(f"Config kaydetme hatası: {str(save_error)}")

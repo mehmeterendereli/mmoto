@@ -97,6 +97,33 @@ class LanguageSwitcher:
         print(f"Dil başarıyla değiştirildi: {self.SUPPORTED_LANGUAGES[language_code]['name']}")
         return True
     
+    def change_tts_voice(self, voice_name: str) -> bool:
+        """
+        TTS ses modelini değiştirir ve config.json'a kaydeder
+        
+        Args:
+            voice_name (str): Yeni ses modeli adı (alloy, ash, echo, vb.)
+            
+        Returns:
+            bool: Başarılı ise True, değilse False
+        """
+        try:
+            # Config dosyasını yükle
+            current_config = self._load_config()
+            
+            # Ses modelini güncelle
+            current_config["default_tts_voice"] = voice_name
+            
+            # Config dosyasına kaydet
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(current_config, f, ensure_ascii=False, indent=2)
+                
+            print(f"TTS ses modeli değiştirildi: {voice_name}")
+            return True
+        except Exception as e:
+            print(f"TTS ses modeli değiştirme hatası: {str(e)}")
+            return False
+        
     def translate_prompt(self, prompt: str, target_language: str = None) -> str:
         """
         Verilen bir promptu hedef dile çevirir

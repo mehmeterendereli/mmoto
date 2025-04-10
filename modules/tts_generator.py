@@ -252,15 +252,25 @@ def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder:
         config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
         ffprobe_path = "ffprobe"
         
+        # Config dosyasını kontrol et - güncel ses modeli için
+        current_voice = voice  # Varsayılan olarak parametre değerini kullan
+        
+        # Config dosyasını kontrol et ve varsa güncel ses modelini al
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
                     
+                    # FFprobe yolunu güncelle
                     if "ffprobe_path" in config:
                         ffprobe_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), config["ffprobe_path"])
-            except:
-                pass
+                    
+                    # Ses modelini güncelle - config.json dosyasındaki değer öncelikli
+                    if "default_tts_voice" in config:
+                        current_voice = config.get("default_tts_voice")
+                        print(f"TTS ses modeli config.json'dan güncellendi: '{voice}' -> '{current_voice}'")
+            except Exception as e:
+                print(f"Config okuma hatası: {str(e)}")
         
         for i, sentence in enumerate(sentences[:max_sentences]):
             # Ses dosyasının adı
@@ -283,22 +293,25 @@ def generate_tts(sentences: List[str], api_key: str, voice: str, project_folder:
             
             # Dile özel ayarlar
             voice_options = {
-                "tr": {"voice": voice, "speed": 1.2},
-                "en": {"voice": voice, "speed": 1.0},
-                "es": {"voice": voice, "speed": 1.1},
-                "fr": {"voice": voice, "speed": 1.1},
-                "de": {"voice": voice, "speed": 1.1},
-                "it": {"voice": voice, "speed": 1.1},
-                "pt": {"voice": voice, "speed": 1.1},
-                "ru": {"voice": voice, "speed": 1.0},
-                "zh": {"voice": voice, "speed": 0.9},
-                "ja": {"voice": voice, "speed": 1.0},
-                "ko": {"voice": voice, "speed": 1.0},
-                "ar": {"voice": voice, "speed": 1.1}
+                "tr": {"voice": current_voice, "speed": 1.2},
+                "en": {"voice": current_voice, "speed": 1.0},
+                "es": {"voice": current_voice, "speed": 1.1},
+                "fr": {"voice": current_voice, "speed": 1.1},
+                "de": {"voice": current_voice, "speed": 1.1},
+                "it": {"voice": current_voice, "speed": 1.1},
+                "pt": {"voice": current_voice, "speed": 1.1},
+                "ru": {"voice": current_voice, "speed": 1.0},
+                "zh": {"voice": current_voice, "speed": 0.9},
+                "ja": {"voice": current_voice, "speed": 1.0},
+                "ko": {"voice": current_voice, "speed": 1.0},
+                "ar": {"voice": current_voice, "speed": 1.1}
             }
             
             # Dile göre ayarları al veya varsayılan kullan
-            voice_config = voice_options.get(language, {"voice": voice, "speed": 1.0})
+            voice_config = voice_options.get(language, {"voice": current_voice, "speed": 1.0})
+            
+            # Kullanılan ses modelini log'la
+            print(f"TTS kullanılan ses modeli: {voice_config['voice']}")
             
             # TTS oluştur
             response = client.audio.speech.create(

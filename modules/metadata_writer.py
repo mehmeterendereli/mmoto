@@ -132,11 +132,19 @@ def write_metadata(project_folder: str, topic: str, keywords: list, model_name: 
         # Get OpenAI API key
         config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
         api_key = ""
+        
+        # Varsayılan ses modeli için config'i kontrol et
+        config = {}
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
                     api_key = config.get("openai_api_key", "")
+                    
+                    # Eğer voice_name parametresi varsayılan "alloy" ise ve config'de başka bir değer varsa
+                    if voice_name == "alloy" and "default_tts_voice" in config:
+                        voice_name = config.get("default_tts_voice")
+                        print(f"Voice model updated from 'alloy' to '{voice_name}' from config")
             except:
                 pass
         
@@ -177,6 +185,7 @@ def write_metadata(project_folder: str, topic: str, keywords: list, model_name: 
             json.dump(metadata, f, ensure_ascii=False, indent=4)
         
         print(f"Metadata file created: {metadata_path}")
+        print(f"Using TTS voice model: {voice_name}")
         
         # Check if stats folder exists
         stats_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stats")
