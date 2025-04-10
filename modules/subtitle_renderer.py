@@ -295,45 +295,301 @@ def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, 
     Returns:
         str: path to the output video file
     """
+    # Giriş parametrelerini kontrol et - eğer timings None ise boş liste yap
+    if timings is None:
+        timings = []
     
     # Altyazı dili değişkenini global olarak tanımla (diğer fonksiyonlar için)
     globals()['subtitle_language'] = subtitle_language
+    
+    # FFmpeg yolunu ayarla - önce config.json'dan almayı dene
+    ffmpeg_path = r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"  # Varsayılan değer
+    try:
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                if "ffmpeg_path" in config:
+                    ffmpeg_path = config.get("ffmpeg_path")
+                    if not os.path.isabs(ffmpeg_path):
+                        # Göreceli yolu mutlak yola çevir
+                        ffmpeg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ffmpeg_path)
+    except Exception as e:
+        pass  # Varsayılan değeri kullan
+    
+    # Log dosyası
+    log_path = os.path.join(project_folder, "subtitle_log.txt")
+    with open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"Starting subtitle rendering with content_language={content_language}, subtitle_language={subtitle_language}\n")
+        log.write(f"Video path: {video_path}, lines count: {len(lines)}, timings count: {len(timings)}\n")
     
     # Sonuç yolunu belirle
     output_video_path = os.path.join(project_folder, "video_with_subtitles.mp4")
     timings_json_path = os.path.join(project_folder, "word_timings.json")
     
-    # TTS klasöründe full_timing.json var mı kontrol et, varsa word_timings.json olarak kopyala
+    # Önce full_timing.json'ı word_timings.json'a kopyalayalım
+    # Çünkü her durumda bu TTS tarafından oluşturulan dosyayı kullanacağız
     tts_folder = os.path.join(project_folder, "tts_audio")
     full_timing_path = os.path.join(tts_folder, "full_timing.json")
+    
     if os.path.exists(full_timing_path) and not os.path.exists(timings_json_path):
-        with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+        with open(log_path, "a", encoding="utf-8") as log:
             log.write(f"Copying {full_timing_path} to {timings_json_path}\n")
         try:
             shutil.copy2(full_timing_path, timings_json_path)
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Successfully copied timing file\n")
         except Exception as e:
-            with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
+            with open(log_path, "a", encoding="utf-8") as log:
                 log.write(f"Error copying timing file: {str(e)}\n")
+    
+    # İçerik dili ve altyazı dili farklıysa çeviri yap
+    if subtitle_language != content_language and openai_api_key:
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_api_key)
+            
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Translating from {content_language} to {subtitle_language}...\n")
+            
+            # word_timings.json dosyasını yükle ve içindeki metni çevir
+            if os.path.exists(timings_json_path):
+                try:
+                    with open(timings_json_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    
+                    # Ana metni çıkar
+                    source_text = data.get("text", "")
+                    if not source_text and isinstance(lines, list) and lines:
+                        source_text = " ".join([str(line) for line in lines])
+                        
+                    if source_text:
+                        translated_text = None  # Başlangıç değeri olarak None ata
+                        
+                        # OpenAI API ile çeviri yap
+                        try:
+                            # Önce gpt-4o ile dene
+                            response = client.chat.completions.create(
+                                model="gpt-4o",  # Önce gpt-4o dene
+                                messages=[
+                                    {"role": "system", "content": f"You are a professional translator. Translate the following text from {content_language} to {subtitle_language}. Keep the translation natural and maintain the same tone. Only return the translated text without any explanations."},
+                                    {"role": "user", "content": source_text}
+                                ]
+                            )
+                            translated_text = response.choices[0].message.content
+                        except Exception as e:
+                            with open(log_path, "a", encoding="utf-8") as log:
+                                log.write(f"First model attempt failed: {str(e)}, trying alternative model\n")
+                            # Alternatif olarak gpt-4 dene
+                            try:
+                                response = client.chat.completions.create(
+                                    model="gpt-4",  # Alternatif model
+                                    messages=[
+                                        {"role": "system", "content": f"You are a professional translator. Translate the following text from {content_language} to {subtitle_language}. Keep the translation natural and maintain the same tone. Only return the translated text without any explanations."},
+                                        {"role": "user", "content": source_text}
+                                    ]
+                                )
+                                translated_text = response.choices[0].message.content
+                            except Exception as e2:
+                                with open(log_path, "a", encoding="utf-8") as log:
+                                    log.write(f"Second model attempt also failed: {str(e2)}, falling back to text-davinci-003\n")
+                                # Son çare olarak text-davinci-003 dene (yaygın model)
+                                try:
+                                    response = client.completions.create(
+                                        model="text-davinci-003",
+                                        prompt=f"Translate the following text from {content_language} to {subtitle_language}. Keep the translation natural:\n\n{source_text}",
+                                        max_tokens=1024,
+                                        temperature=0.3
+                                    )
+                                    # Eski model formatına uyum için response yapısını ayarla
+                                    translated_text = response.choices[0].text.strip()
+                                    with open(log_path, "a", encoding="utf-8") as log:
+                                        log.write(f"Used text-davinci-003 for translation\n")
+                                except Exception as e3:
+                                    with open(log_path, "a", encoding="utf-8") as log:
+                                        log.write(f"All API translation attempts failed: {str(e3)}\n")
+                                    translated_text = None
+                        
+                        # Çevirinin başarılı olup olmadığını kontrol et
+                        if translated_text:
+                            with open(log_path, "a", encoding="utf-8") as log:
+                                log.write(f"Original text: {source_text[:50]}...\n")
+                                log.write(f"Translated text: {translated_text[:50]}...\n")
+                            
+                            # Çevrilmiş metni JSON dosyasına da kaydet (gerekirse)
+                            try:
+                                # Mevcut JSON'a çevrilmiş metni ekle
+                                data["translated_text"] = translated_text
+                                data["subtitle_language"] = subtitle_language
+                                
+                                # JSON'ı güncelle
+                                with open(timings_json_path, "w", encoding="utf-8") as f:
+                                    json.dump(data, f, indent=2)
+                                with open(log_path, "a", encoding="utf-8") as log:
+                                    log.write(f"Updated JSON with translated text\n")
+                            except Exception as e:
+                                with open(log_path, "a", encoding="utf-8") as log:
+                                    log.write(f"Error updating JSON with translation: {str(e)}\n")
+                        else:
+                            # API çeviri başarısız olduğunda basit bir çeviri yapma (dillere göre kelime değişimi)
+                            with open(log_path, "a", encoding="utf-8") as log:
+                                log.write("Translation API failed completely, using basic word substitution\n")
+                            
+                            # Burada temel dil çiftleri için basit bir çeviri ekleyebiliriz
+                            # Örnek: Türkçe -> İngilizce'ye basit kelime değişimi
+                            if content_language == "tr" and subtitle_language == "en":
+                                # Basit kelime değişimi sözlüğü (yaygın Türkçe kelimelerin İngilizce karşılıkları)
+                                tr_to_en = {
+                                    # Temel bağlaçlar ve edatlar
+                                    "ve": "and", "bir": "a", "bu": "this", "için": "for", "ile": "with",
+                                    "olarak": "as", "var": "there is", "çok": "very", "daha": "more",
+                                    "gibi": "like", "kadar": "until", "sonra": "after", "önce": "before",
+                                    "şey": "thing", "zaman": "time", "gün": "day", "yıl": "year",
+                                    "kişi": "person", "insan": "human", "nasıl": "how", "ne": "what",
+                                    "neden": "why", "kim": "who", "nerede": "where", "ne zaman": "when",
+                                    "ama": "but", "fakat": "however", "veya": "or", "ya da": "or",
+                                    "şimdi": "now", "hemen": "immediately", "belki": "maybe", "kesinlikle": "definitely",
+                                    
+                                    # Yaygın fiiller
+                                    "olmak": "to be", "yapmak": "to do", "gitmek": "to go", "gelmek": "to come",
+                                    "görmek": "to see", "bilmek": "to know", "istemek": "to want", "almak": "to take",
+                                    "vermek": "to give", "bulmak": "to find", "duymak": "to hear", "söylemek": "to say",
+                                    "düşünmek": "to think", "konuşmak": "to speak", "anlamak": "to understand",
+                                    
+                                    # Yaygın sıfatlar
+                                    "büyük": "big", "küçük": "small", "iyi": "good", "kötü": "bad",
+                                    "güzel": "beautiful", "çirkin": "ugly", "hızlı": "fast", "yavaş": "slow",
+                                    "eski": "old", "yeni": "new", "sıcak": "hot", "soğuk": "cold",
+                                    "uzun": "long", "kısa": "short", "kolay": "easy", "zor": "difficult",
+                                    
+                                    # Bilimsel kelimeler
+                                    "bilim": "science", "teknoloji": "technology", "keşif": "discovery",
+                                    "araştırma": "research", "deney": "experiment", "teori": "theory",
+                                    "geliştirmek": "to develop", "evren": "universe", "uzay": "space",
+                                    "dünya": "world", "yaşam": "life", "canlı": "living",
+                                    "mars": "mars", "gezegen": "planet", "yıldız": "star",
+                                    "gizli": "secret", "hayat": "life", "belirtiler": "signs",
+                                    "kanıt": "evidence", "mikroorganizma": "microorganism",
+                                    "yüzey": "surface", "bulunmak": "to find", "açıklamak": "to explain",
+                                    
+                                    # Mars metni için özel kelimeler
+                                    "şaşırtıcı": "surprising", "dikkat": "attention", "çekiyor": "draws",
+                                    "inanılmaz": "incredible", "şoke": "shocked", "buluş": "finding",
+                                    "benzerlik": "similarity", "gösteriyor": "shows", "dayanıklı": "resistant",
+                                    "koşul": "condition", "aşırı": "extreme", "gerçek": "truth",
+                                    "bilmediği": "unknown", "beklenmedik": "unexpected", "açıkladı": "announced",
+                                    "somut": "concrete", "olabilir": "might be"
+                                }
+                                
+                                # Metni kelimelere ayır
+                                words = source_text.split()
+                                # Basit kelime değişimi ile çeviri
+                                translated_words = []
+                                for word in words:
+                                    lower_word = word.lower()
+                                    # Kelime sözlükte varsa değiştir, yoksa aynı bırak
+                                    if lower_word in tr_to_en:
+                                        translated_words.append(tr_to_en[lower_word])
+                                    else:
+                                        translated_words.append(word)
+                                
+                                translated_text = " ".join(translated_words)
+                                with open(log_path, "a", encoding="utf-8") as log:
+                                    log.write(f"Basic substitution result: {translated_text[:50]}...\n")
+                            else:
+                                # Diğer dil çiftleri için orijinal metni kullan
+                                translated_text = source_text
+                                with open(log_path, "a", encoding="utf-8") as log:
+                                    log.write("No translation method available, using original text\n")
+                        
+                        # Çevrilmiş metni word_by_word.srt dosyasına dönüştür
+                        srt_path = os.path.join(project_folder, "word_by_word.srt")
+                        words = []
+                        
+                        # Kelime zamanlamalarını al
+                        if "words" in data and isinstance(data["words"], list):
+                            words = [w for w in data["words"] if "word" in w and "start" in w and "end" in w]
+                        
+                        if words:
+                            # Çevrilmiş metni kelimelere böl
+                            translated_words = translated_text.split()
+                            
+                            # SRT dosyasını oluştur
+                            with open(srt_path, "w", encoding="utf-8") as srt_file:
+                                word_count = min(len(words), len(translated_words))
+                                for i in range(word_count):
+                                    # Orijinal kelime zamanlamalarını kullan ama çevrilmiş kelimeleri yaz
+                                    start = format_srt_time(words[i]["start"])
+                                    end = format_srt_time(words[i]["end"])
+                                    text = translated_words[i]
+                                    
+                                    # Büyük fontlu, beyaz yazı, siyah arka plan
+                                    styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
+                                    
+                                    # SRT girişini yaz
+                                    srt_file.write(f"{i+1}\n")
+                                    srt_file.write(f"{start} --> {end}\n")
+                                    srt_file.write(f"{styled_text}\n\n")
+                            
+                            with open(log_path, "a", encoding="utf-8") as log:
+                                log.write(f"Created translated SRT with {word_count} words\n")
+                            
+                            # Çevrilmiş SRT ile video oluştur
+                            cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "subtitles={srt_path}:force_style=\'Fontsize=18,Alignment=2,MarginV=60\'" -c:v libx264 -c:a copy "{output_video_path}"'
+                            
+                            with open(log_path, "a", encoding="utf-8") as log:
+                                log.write(f"Running FFmpeg command: {cmd}\n")
+                            
+                            # Çalışma dizini değiştirerek çalıştır
+                            process = subprocess.Popen(
+                                cmd,
+                                shell=True,
+                                cwd=project_folder,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE
+                            )
+                            
+                            stdout, stderr = process.communicate()
+                            if process.returncode == 0 and os.path.exists(output_video_path):
+                                with open(log_path, "a", encoding="utf-8") as log:
+                                    log.write(f"Translated subtitles video created successfully\n")
+                                return output_video_path
+                except Exception as e:
+                    with open(log_path, "a", encoding="utf-8") as log:
+                        log.write(f"Error during translation process: {str(e)}\n")
+        except Exception as e:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Translation failed: {str(e)}\n")
     
     # Kelime zamanlamaları JSON dosyasının varlığını kontrol et
     if os.path.exists(timings_json_path):
         # Doğrudan helper fonksiyonu kullan
-        success = create_word_by_word_video(
-            video_path=video_path,
-            timings_json_path=timings_json_path,
-            output_path=output_video_path,
-            ffmpeg_path=r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"
-        )
-        
-        # Başarılı ise direkt dön
-        if success:
-            return output_video_path
+        try:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Calling create_word_by_word_video with timing file: {timings_json_path}\n")
+            
+            success = create_word_by_word_video(
+                video_path=video_path,
+                timings_json_path=timings_json_path,
+                output_path=output_video_path,
+                ffmpeg_path=ffmpeg_path
+            )
+            
+            # Başarılı ise direkt dön
+            if success:
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"Successfully created subtitled video with create_word_by_word_video\n")
+                return output_video_path
+            else:
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"create_word_by_word_video returned false, trying alternative methods\n")
+        except Exception as e:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Error in create_word_by_word_video: {str(e)}\n")
     
     # Önceki yöntemlerle devam et
     logging.info(f"Starting subtitle process for video: {video_path}")
     logging.info(f"Project folder: {project_folder}")
-    
-    ffmpeg_path = r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"  # FFmpeg yolu
     
     if not timings:
         with open(os.path.join(project_folder, "subtitle_log.txt"), "a", encoding="utf-8") as log:
@@ -392,7 +648,7 @@ def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, 
                     video_path=video_path,
                     timings_json_path=timings_json_path,
                     output_path=output_video_path,
-                    ffmpeg_path=r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"
+                    ffmpeg_path=ffmpeg_path
                 )
                 
                 if success:
@@ -654,7 +910,19 @@ def create_word_by_word_video(video_path: str, timings_json_path: str = None, ou
     """
     # FFmpeg yolunu ayarla
     if ffmpeg_path is None:
-        ffmpeg_path = r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"
+        # Varsayılan FFmpeg yolunu ayarla - önce config.json'dan almayı dene
+        ffmpeg_path = r"C:\Users\pc\Desktop\MMoto\bin\bin\ffmpeg.exe"  # Varsayılan değer
+        try:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                    if "ffmpeg_path" in config:
+                        ffmpeg_path = config.get("ffmpeg_path")
+                        if not os.path.isabs(ffmpeg_path):
+                            ffmpeg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ffmpeg_path)
+        except Exception:
+            pass  # Varsayılan değeri kullan
     
     # Proje klasörünü bul
     if video_path:
@@ -691,6 +959,28 @@ def create_word_by_word_video(video_path: str, timings_json_path: str = None, ou
         log.write(f"Word by word subtitling started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         log.write(f"Using timings file: {timings_json_path}\n")
     
+    # Yapılandırma dosyasını yükle
+    config = None
+    try:
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+    except Exception as e:
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"Yapılandırma yükleme hatası: {str(e)}\n")
+    
+    # Altyazı ve içerik dillerini al
+    content_language = "tr"  # varsayılan
+    subtitle_language = "tr"  # varsayılan
+    
+    if config:
+        content_language = config.get("content_language", "tr")
+        subtitle_language = config.get("subtitle_language", "tr")
+    
+    with open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"Content language: {content_language}, Subtitle language: {subtitle_language}\n")
+    
     # JSON dosyasını yükle
     try:
         with open(timings_json_path, "r", encoding="utf-8") as f:
@@ -726,28 +1016,104 @@ def create_word_by_word_video(video_path: str, timings_json_path: str = None, ou
             log.write("JSON dosyasında kelime zamanlamaları bulunamadı\n")
         return False
     
-    # Geçici SRT dosyası oluştur
-    srt_path = os.path.join(project_folder, "word_by_word.srt")
-    with open(srt_path, "w", encoding="utf-8") as srt_file, open(log_path, "a", encoding="utf-8") as log:
-        log.write(f"Creating SRT file at {srt_path}\n")
-        for i, word in enumerate(words, 1):
-            # SRT formatına dönüştür
-            start = format_srt_time(word["start"])
-            end = format_srt_time(word["end"])
-            text = word["word"].strip()
+    # Diğer dile çeviri ihtiyacı kontrolü ve çevrilmiş metni al
+    translated_text = None
+    
+    # Önce JSON dosyasında translated_text alanını kontrol et
+    if content_language != subtitle_language:
+        try:
+            if "translated_text" in data and data["translated_text"] and isinstance(data["translated_text"], str):
+                translated_text = data["translated_text"]
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"Found translated text in JSON: {translated_text[:50]}...\n")
+        except Exception as e:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Error checking translated_text in JSON: {str(e)}\n")
+    
+    # Eğer JSON'da çeviri yoksa önceden çevirdiğimiz SRT dosyasını kontrol et
+    translated_srt_path = os.path.join(project_folder, "word_by_word.srt")
+    if os.path.exists(translated_srt_path) and content_language != subtitle_language:
+        # SRT'den çevirinin olup olmadığını kontrol et
+        try:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Checking for existing translated SRT at {translated_srt_path}\n")
             
-            # Büyük fontlu, beyaz yazı, siyah arka plan
-            styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
-            
-            # SRT girişini yaz
-            srt_file.write(f"{i}\n")
-            srt_file.write(f"{start} --> {end}\n")
-            srt_file.write(f"{styled_text}\n\n")
+            with open(translated_srt_path, "r", encoding="utf-8") as srt_file:
+                lines = srt_file.readlines()
+                
+                # SRT içeriğinden çevirilen metni çıkar
+                translated_words = []
+                for i in range(2, len(lines), 4):  # Her 4 satırda bir metin satırı var (1-index, timestamp, text, boş satır)
+                    if i < len(lines):
+                        # Metin satırındaki HTML etiketlerini temizle
+                        line = lines[i].strip()
+                        if "<font" in line and "</font>" in line:
+                            # <font...><b>WORD</b></font> formatından WORD'ü çıkar
+                            word = line.split("<b>")[1].split("</b>")[0] if "<b>" in line and "</b>" in line else ""
+                            if word:
+                                translated_words.append(word)
+                
+                if translated_words:
+                    with open(log_path, "a", encoding="utf-8") as log:
+                        log.write(f"Found {len(translated_words)} translated words in existing SRT\n")
+                    
+                    # Çevrilen kelimeleri kaydet
+                    translated_text = " ".join(translated_words)
+        except Exception as e:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Error extracting translations from SRT: {str(e)}\n")
+    
+    # Çevrilmiş SRT ve kelimeler var mı kontrol et
+    if translated_text and content_language != subtitle_language:
+        translated_words = translated_text.split()
         
-        log.write(f"Added {len(words)} words to SRT file\n")
+        # Yeni SRT dosyası oluştur
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"Creating SRT with {len(translated_words)} translated words\n")
+        
+        # Yeniden SRT dosyası oluştur
+        with open(translated_srt_path, "w", encoding="utf-8") as srt_file:
+            # Minimum kelime sayısını belirle
+            word_count = min(len(words), len(translated_words))
+            for i in range(word_count):
+                # Orijinal kelime zamanlamalarını kullan ama çevrilmiş kelimeleri yaz
+                start = format_srt_time(words[i]["start"])
+                end = format_srt_time(words[i]["end"])
+                text = translated_words[i]
+                
+                # Büyük fontlu, beyaz yazı, siyah arka plan
+                styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
+                
+                # SRT girişini yaz
+                srt_file.write(f"{i+1}\n")
+                srt_file.write(f"{start} --> {end}\n")
+                srt_file.write(f"{styled_text}\n\n")
+            
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"Created SRT with {word_count} translated words\n")
+    else:
+        # Çeviri yoksa normal SRT dosyası oluştur
+        srt_path = os.path.join(project_folder, "word_by_word.srt")
+        with open(srt_path, "w", encoding="utf-8") as srt_file, open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"Creating SRT file at {srt_path} with original words\n")
+            for i, word in enumerate(words, 1):
+                # SRT formatına dönüştür
+                start = format_srt_time(word["start"])
+                end = format_srt_time(word["end"])
+                text = word["word"].strip()
+                
+                # Büyük fontlu, beyaz yazı, siyah arka plan
+                styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
+                
+                # SRT girişini yaz
+                srt_file.write(f"{i}\n")
+                srt_file.write(f"{start} --> {end}\n")
+                srt_file.write(f"{styled_text}\n\n")
+            
+            log.write(f"Added {len(words)} words to SRT file\n")
     
     # Altyazılı videoyu oluştur - relative path kullanarak
-    srt_file_name = os.path.basename(srt_path)
+    srt_file_name = os.path.basename(translated_srt_path)
     cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "subtitles={srt_file_name}:force_style=\'Fontsize=18,Alignment=2,MarginV=60\'" -c:v libx264 -c:a copy "{output_path}"'
     
     with open(log_path, "a", encoding="utf-8") as log:

@@ -218,11 +218,12 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
             subtitled_video = render_subtitles(
                 video_with_audio,
                 content_data["response"],
-                font_path,
+                [],
                 project_folder,
                 subtitle_language=subtitle_language,  # Altyazı dili kullanılır
                 content_language=language,           # İçerik dili gerekirse çeviri için kullanılır
-                openai_api_key=openai_api_key
+                openai_api_key=openai_api_key,
+                font_path=font_path
             )
             log_message(f"Subtitles added in {subtitle_language} language")
         except Exception as e:
