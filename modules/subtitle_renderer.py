@@ -41,9 +41,13 @@ def load_word_timings(project_folder: str) -> List[Dict[str, Any]]:
         try:
             with open(full_timing_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
+                
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"Loaded timing data keys: {list(data.keys())}\n")
+        except Exception as e:
             with open(log_path, "a", encoding="utf-8") as log:
-                log.write(f"Loaded timing data keys: {list(data.keys())}\n")
+                log.write(f"Error loading timing data: {str(e)}\n")
+            return timings
             
             words = []
             
@@ -232,7 +236,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,24,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,1,2,10,10,50,1
+Style: Default,Arial,24,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,1,2,10,10,100,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -457,7 +461,7 @@ def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, 
         # 2. Deneme: Subtitles filtresi ile shell komut kullanarak (manuel saf shell komutu)
         try:
             # Basit shell komutu, subtitles filtresini her türlü encoding probleminden uzak tutar
-            shell_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf subtitles=subtitles.srt:force_style="FontSize=18,Alignment=2,BorderStyle=4,Outline=2,Shadow=1,MarginV=20" -c:v libx264 -c:a copy "{output_video_path}"'
+            shell_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf subtitles=subtitles.srt:force_style="FontSize=18,Alignment=2,BorderStyle=4,Outline=2,Shadow=1,MarginV=60" -c:v libx264 -c:a copy "{output_video_path}"'
             
             log.write(f"Running direct shell command with relative path: {shell_cmd}\n")
             
@@ -528,7 +532,7 @@ def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, 
                     log.write(f"Created TEXT file with content\n")
             
             # FFmpeg komutu oluştur - drawtext filtresiyle
-            text_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "drawtext=fontfile=/Windows/Fonts/Arial.ttf:textfile=subtitles.txt:reload=1:fontcolor=white:fontsize=12:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=h-th-20" -c:v libx264 -c:a copy "{output_video_path}"'
+            text_cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "drawtext=fontfile=/Windows/Fonts/Arial.ttf:textfile=subtitles.txt:reload=1:fontcolor=white:fontsize=12:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=h-th-100" -c:v libx264 -c:a copy "{output_video_path}"'
             log.write(f"Running TEXT file command: {text_cmd}\n")
             
             # Komutu çalıştır
@@ -553,7 +557,7 @@ def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, 
         # 5. Deneme: Filter complex kullanarak dene ve force_style ekle
         filter_complex_cmd = [
             ffmpeg_path, "-y", "-i", video_path,
-            "-filter_complex", f"[0:v]subtitles={ext_srt_path}:force_style='FontSize=12,Alignment=2,MarginV=20'[v]", "-map", "[v]", "-map", "0:a",
+            "-filter_complex", f"[0:v]subtitles={ext_srt_path}:force_style='FontSize=12,Alignment=2,MarginV=100'[v]", "-map", "[v]", "-map", "0:a",
             "-c:v", "libx264", "-c:a", "copy", "-shortest",
             output_video_path
         ]
@@ -744,7 +748,7 @@ def create_word_by_word_video(video_path: str, timings_json_path: str = None, ou
     
     # Altyazılı videoyu oluştur - relative path kullanarak
     srt_file_name = os.path.basename(srt_path)
-    cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf subtitles={srt_file_name} -c:v libx264 -c:a copy "{output_path}"'
+    cmd = f'"{ffmpeg_path}" -y -i "{video_path}" -vf "subtitles={srt_file_name}:force_style=\'Fontsize=18,Alignment=2,MarginV=60\'" -c:v libx264 -c:a copy "{output_path}"'
     
     with open(log_path, "a", encoding="utf-8") as log:
         log.write(f"Running FFmpeg command: {cmd}\n")
