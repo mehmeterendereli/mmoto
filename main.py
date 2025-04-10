@@ -42,7 +42,7 @@ def load_config():
 
 async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixabay_api_key="", youtube_api_key="", 
                               language="tr", tts_language="tr", subtitle_language="tr", max_videos=None, 
-                              continuous_mode=False, log_callback=None, upload_to_youtube=True):
+                              continuous_mode=False, log_callback=None, upload_to_youtube=True, video_source="pexels"):
     """
     Tek bir video işleme süreci için asenkron fonksiyon
     
@@ -59,6 +59,7 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
         continuous_mode (bool): Sürekli çalışma modu
         log_callback (callable): Log mesajlarını göndermek için callback fonksiyonu
         upload_to_youtube (bool): Video YouTube'a yüklensin mi
+        video_source (str): Video kaynağı ("pexels" veya "pixabay")
         
     Returns:
         tuple: (success, video_url) - İşlem başarılı mı ve video URL'si
@@ -141,7 +142,8 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
                 content_data["response"],
                 project_folder,
                 min_score=3.0,
-                language=language  # Çeviriler için kullanılır, arama her zaman İngilizce
+                language=language,  # Çeviriler için kullanılır, arama her zaman İngilizce
+                video_source=video_source  # Video kaynağı parametresi eklendi
             )
             log_message(f"{len(videos)} videos downloaded")
             
@@ -396,7 +398,7 @@ async def process_single_video(topic, openai_api_key="", pexels_api_key="", pixa
         log_message(f"An error occurred: {str(e)}", True)
         return False, None
 
-async def async_main(continuous_mode=False, max_videos=None, language='tr', tts_language='tr', subtitle_language='tr', upload_to_youtube=True):
+async def async_main(continuous_mode=False, max_videos=None, language='tr', tts_language='tr', subtitle_language='tr', upload_to_youtube=True, video_source="pexels"):
     """Ana asenkron fonksiyon, sürekli mod desteği ile"""
     # Logging settings
     logging.basicConfig(
@@ -461,7 +463,8 @@ async def async_main(continuous_mode=False, max_videos=None, language='tr', tts_
                     subtitle_language,  # Altyazı dili
                     max_videos, 
                     continuous_mode,
-                    upload_to_youtube=upload_to_youtube  # YouTube'a yükleme seçeneği
+                    upload_to_youtube=upload_to_youtube,  # YouTube'a yükleme seçeneği
+                    video_source=video_source  # Video kaynağı
                 )
                 
                 # Video sayacını artır
@@ -537,6 +540,9 @@ def main():
         tts_language = 'tr'  # TTS dili
         subtitle_language = 'tr'  # Altyazı dili
         
+        # Video kaynağı seçeneği
+        video_source = "pexels"  # Varsayılan olarak pexels
+        
         # Maksimum video sayısını kontrol et
         for arg in sys.argv:
             if arg.startswith("--max="):
@@ -559,6 +565,11 @@ def main():
                 sub_lang = arg.split("=")[1].lower()
                 if sub_lang in ['en', 'tr', 'es', 'fr', 'de']:
                     subtitle_language = sub_lang
+            # Video kaynağı parametresi
+            elif arg.startswith("--source=") or arg.startswith("--video-source="):
+                source = arg.split("=")[1].lower()
+                if source in ['pexels', 'pixabay']:
+                    video_source = source
         
         # Eğer sürekli çalışma modu seçildiyse kullanıcıyı bilgilendir
         if continuous_mode:
@@ -570,6 +581,7 @@ def main():
             print("Content Language / İçerik Dili: " + language)
             print("TTS Language / Seslendirme Dili: " + tts_language)
             print("Subtitle Language / Altyazı Dili: " + subtitle_language)
+            print(f"Video Source / Video Kaynağı: {video_source}")
             print(f"Upload to YouTube / YouTube'a Yükleme: {'Yes/Evet' if upload_to_youtube else 'No/Hayır'}")
             
             print("The program will automatically create and upload videos" if language == 'en' else "Program, GPT tarafından üretilen konulara göre otomatik olarak")
@@ -585,7 +597,8 @@ def main():
             language=language, 
             tts_language=tts_language, 
             subtitle_language=subtitle_language,
-            upload_to_youtube=upload_to_youtube
+            upload_to_youtube=upload_to_youtube,
+            video_source=video_source
         ), debug=False)
         
         # Add a short delay to allow for any pending operations to complete

@@ -557,7 +557,7 @@ def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, 
         # 5. Deneme: Filter complex kullanarak dene ve force_style ekle
         filter_complex_cmd = [
             ffmpeg_path, "-y", "-i", video_path,
-            "-filter_complex", f"[0:v]subtitles={ext_srt_path}:force_style='FontSize=12,Alignment=2,MarginV=100'[v]", "-map", "[v]", "-map", "0:a",
+            "-filter_complex", f"[0:v]subtitles={ext_srt_path}:force_style='FontSize=8,Alignment=2,MarginV=100'[v]", "-map", "[v]", "-map", "0:a",
             "-c:v", "libx264", "-c:a", "copy", "-shortest",
             output_video_path
         ]

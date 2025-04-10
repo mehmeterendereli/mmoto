@@ -9,6 +9,7 @@ import webbrowser
 from datetime import datetime
 from PIL import Image, ImageTk
 import time
+import pkg_resources
 
 # Ana programdan içe aktarmalar
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -274,6 +275,47 @@ class MMotoApp(ctk.CTk):
         self.topic_btn = ctk.CTkButton(top_frame, text=_("generate_topic"), command=self.generate_topic)
         self.topic_btn.grid(row=0, column=2, padx=5, pady=10)
         
+        # Video sağlayıcı seçimi için frame
+        provider_frame = ctk.CTkFrame(self.home_frame)
+        provider_frame.grid(row=2, column=0, padx=10, pady=(0, 5), sticky="ew")
+        
+        # Video sağlayıcı etiketi
+        provider_label = ctk.CTkLabel(provider_frame, text="Video Kaynağı:")
+        provider_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        # Video sağlayıcı değişkeni - eğer daha önce oluşturulmamışsa
+        if not hasattr(self, 'video_source_var'):
+            # Config'den kaynak değerini al, yoksa "pexels" varsayılan değerini kullan
+            default_source = "pexels"
+            try:
+                with open('config.json', 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    default_source = config.get("video_source", "pexels")
+            except:
+                pass
+                
+            self.video_source_var = ctk.StringVar(value=default_source)
+        
+        # Pexels radio butonu
+        pexels_radio = ctk.CTkRadioButton(
+            provider_frame,
+            text="Pexels",
+            variable=self.video_source_var,
+            value="pexels",
+            command=self.on_video_source_change
+        )
+        pexels_radio.grid(row=0, column=1, padx=15, pady=5, sticky="w")
+        
+        # Pixabay radio butonu
+        pixabay_radio = ctk.CTkRadioButton(
+            provider_frame,
+            text="Pixabay",
+            variable=self.video_source_var,
+            value="pixabay",
+            command=self.on_video_source_change
+        )
+        pixabay_radio.grid(row=0, column=2, padx=15, pady=5, sticky="w")
+        
         # Ana içerik - Log alanı
         content_frame = ctk.CTkFrame(self.home_frame)
         content_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
@@ -289,7 +331,7 @@ class MMotoApp(ctk.CTk):
         
         # Ayarlar bölümü
         settings_frame = ctk.CTkFrame(self.home_frame)
-        settings_frame.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
+        settings_frame.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
         settings_frame.grid_columnconfigure(1, weight=1)
         
         # Sürekli çalışma seçeneği
@@ -325,7 +367,7 @@ class MMotoApp(ctk.CTk):
         
         # Alt panel - Kontrol butonları
         button_frame = ctk.CTkFrame(self.home_frame)
-        button_frame.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
+        button_frame.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
         
         # Başlat butonu
         self.start_btn = ctk.CTkButton(button_frame, text=_("start"), command=self.start_process)
@@ -634,57 +676,63 @@ class MMotoApp(ctk.CTk):
             self.add_log(f"Dil değiştirme hatası: {str(e)}")
             
     def load_config(self, silent=False):
-        """API anahtarlarını ve ayarları config.json dosyasından yükler"""
+        """Config dosyasını yükler ve uygulamaya uygular"""
         try:
-            if os.path.exists("config.json"):
-                with open("config.json", "r", encoding="utf-8") as f:
+            if os.path.exists('config.json'):
+                with open('config.json', 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                
-                # API anahtarlarını yükle
-                if "openai_api_key" in config:
-                    self.openai_api_var.set(config["openai_api_key"])
                     
-                if "pexels_api_key" in config:
-                    self.pexels_api_var.set(config["pexels_api_key"])
+                    # API anahtarları
+                    if "openai_api_key" in config:
+                        self.openai_api_var.set(config["openai_api_key"])
                     
-                if "youtube_api_key" in config:
-                    self.youtube_api_var.set(config["youtube_api_key"])
+                    if "pexels_api_key" in config:
+                        self.pexels_api_var.set(config["pexels_api_key"])
                     
-                if "pixabay_api_key" in config:
-                    self.pixabay_api_var.set(config["pixabay_api_key"])
-                
-                # YouTube yükleme seçeneği
-                if "upload_to_youtube" in config:
-                    self.upload_to_youtube_var.set(config.get("upload_to_youtube", True))
-                
-                # Dil ayarlarını yükle
-                ui_lang = config.get("ui_language", DEFAULT_UI_LANGUAGE)
-                content_lang = config.get("content_language", DEFAULT_CONTENT_LANGUAGE)
-                subtitle_lang = config.get("subtitle_language", DEFAULT_SUBTITLE_LANGUAGE)
-                
-                # Sadece config dosyasındaki değerlerden farklı ise güncelle
-                # Bu, dil değişim döngüsünü önlemek için önemli
-                if not silent:
-                    # UI dil değişkenini güncelle ve arayüzü yenile
-                    if ui_lang != self.ui_language_var.get():
-                        self.ui_language_var.set(ui_lang)
+                    if "youtube_api_key" in config:
+                        self.youtube_api_var.set(config["youtube_api_key"])
+                        
+                    if "pixabay_api_key" in config:
+                        self.pixabay_api_var.set(config["pixabay_api_key"])
                     
-                    # İçerik dili değişkenini güncelle
-                    if content_lang != self.content_language_var.get():
-                        self.content_language_var.set(content_lang)
+                    # YouTube yükleme seçeneği
+                    if "upload_to_youtube" in config:
+                        self.upload_to_youtube_var.set(config.get("upload_to_youtube", True))
                     
-                    # Altyazı dili değişkenini güncelle
-                    if subtitle_lang != self.subtitle_language_var.get():
-                        self.subtitle_language_var.set(subtitle_lang)
-                
-                if not silent:
-                    # Yüklenen değerlerle ilgili mesaj
-                    self.add_log(f"Ayarlar dosyadan yüklendi")
-                    self.add_log(f"Dil ayarları: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
-                    # Arayüz dilini ayarla
-                    language_manager.set_language(self.ui_language_var.get())
-                
-                return config
+                    # Video kaynağı ayarı
+                    if "video_source" in config and hasattr(self, 'video_source_var'):
+                        self.video_source_var.set(config.get("video_source", "pexels"))
+                    
+                    # Dil ayarlarını yükle
+                    ui_lang = config.get("ui_language", DEFAULT_UI_LANGUAGE)
+                    content_lang = config.get("content_language", DEFAULT_CONTENT_LANGUAGE)
+                    subtitle_lang = config.get("subtitle_language", DEFAULT_SUBTITLE_LANGUAGE)
+                    
+                    # Sadece config dosyasındaki değerlerden farklı ise güncelle
+                    # Bu, dil değişim döngüsünü önlemek için önemli
+                    if not silent:
+                        # UI dil değişkenini güncelle ve arayüzü yenile
+                        if ui_lang != self.ui_language_var.get():
+                            self.ui_language_var.set(ui_lang)
+                        
+                        # İçerik dili değişkenini güncelle
+                        if content_lang != self.content_language_var.get():
+                            self.content_language_var.set(content_lang)
+                        
+                        # Altyazı dili değişkenini güncelle
+                        if subtitle_lang != self.subtitle_language_var.get():
+                            self.subtitle_language_var.set(subtitle_lang)
+                    
+                    if not silent:
+                        # Yüklenen değerlerle ilgili mesaj
+                        self.add_log(f"Ayarlar dosyadan yüklendi")
+                        self.add_log(f"Dil ayarları: UI={ui_lang}, İçerik={content_lang}, Altyazı={subtitle_lang}")
+                        if hasattr(self, 'video_source_var'):
+                            self.add_log(f"Video kaynağı: {self.video_source_var.get()}")
+                        # Arayüz dilini ayarla
+                        language_manager.set_language(self.ui_language_var.get())
+                    
+                    return config
             else:
                 if not silent:
                     self.add_log("Config dosyası bulunamadı, varsayılan değerler kullanılıyor.")
@@ -854,33 +902,36 @@ class MMotoApp(ctk.CTk):
         return datetime.now().strftime("%H:%M:%S")
 
     def save_settings(self):
-        """Ayarları kaydeder"""
+        """Ayarları config.json dosyasına kaydeder"""
         try:
-            # Config dosyasını yükle
+            # Mevcut config dosyasını yükle
             config = self.load_config()
             
-            # İçerik dili
-            content_lang = self.content_language_var.get()
-            
-            # Dil ayarlarını kaydet
+            # Dil ayarlarını güncelle
             config["ui_language"] = self.ui_language_var.get()
-            config["content_language"] = content_lang
-            config["tts_language"] = content_lang  # İçerik dili ile aynı olmalı
+            config["content_language"] = self.content_language_var.get()
+            config["tts_language"] = self.content_language_var.get()  # TTS dili şimdilik içerik diliyle aynı
             config["subtitle_language"] = self.subtitle_language_var.get()
             
-            # Debug
-            self.add_log(f"Debug: Kaydedilen içerik dili: {content_lang}")
-            self.add_log(f"Debug: Kaydedilen tts dili: {content_lang}")
+            # Video kaynağı ayarını güncelle
+            config["video_source"] = self.video_source_var.get()
             
-            # Dosyaya yaz
+            # Config dosyasına kaydet
             with open("config.json", "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-                
-            # Başarı mesajı
+            
+            # Başarılı mesajını göster
             self.settings_status_var.set(_("settings_saved"))
             self.after(3000, lambda: self.settings_status_var.set(""))
             
+            # Log'a kayıt
+            self.add_log(f"Ayarlar kaydedildi. UI dili: {self.ui_language_var.get()}, "
+                       f"İçerik dili: {self.content_language_var.get()}, "
+                       f"Altyazı dili: {self.subtitle_language_var.get()}, "
+                       f"Video kaynağı: {self.video_source_var.get()}")
+            
         except Exception as e:
+            # Hata mesajını göster
             self.settings_status_var.set(f"{_('error_prefix')}{str(e)}")
             self.after(3000, lambda: self.settings_status_var.set(""))
 
@@ -1141,8 +1192,12 @@ class MMotoApp(ctk.CTk):
             if not hasattr(self, 'global_video_counter'):
                 self.global_video_counter = 0
             
+            # Video kaynağını al
+            video_source = self.video_source_var.get()
+            
             # Log mesajları
             self.add_log(f"{_('process_started')}: {topic}")
+            self.add_log(f"Video kaynağı: {video_source}")
             if continuous:
                 self.add_log(_("continuous_mode_enabled"))
                 # Maksimum video sayısı bilgisini göster
@@ -1171,6 +1226,12 @@ class MMotoApp(ctk.CTk):
             pexels_api_key = self.pexels_api_var.get().strip()
             youtube_api_key = self.youtube_api_var.get().strip()
             pixabay_api_key = self.pixabay_api_var.get().strip()
+            
+            # Seçilen video kaynağına göre API anahtarı kontrolü
+            if video_source == "pexels" and not pexels_api_key:
+                update_ui("Uyarı: Pexels API anahtarı boş. API Keys sayfasından ayarlayın.", True)
+            elif video_source == "pixabay" and not pixabay_api_key:
+                update_ui("Uyarı: Pixabay API anahtarı boş. API Keys sayfasından ayarlayın.", True)
             
             # OpenAI API key kontrolü
             if not openai_api_key:
@@ -1202,7 +1263,8 @@ class MMotoApp(ctk.CTk):
                 "max_videos": max_videos,
                 "continuous_mode": continuous,
                 "log_callback": update_ui,
-                "upload_to_youtube": upload_to_youtube  # YouTube'a yükleme seçeneğini ekle
+                "upload_to_youtube": upload_to_youtube,  # YouTube'a yükleme seçeneğini ekle
+                "video_source": video_source  # Video kaynağı parametresini ekle
             }
             
             # İşlemi başlat
@@ -1323,6 +1385,35 @@ class MMotoApp(ctk.CTk):
     def add_log(self, message):
         """Log mesajı ekler"""
         self.log_queue.put(message)
+
+    def on_video_source_change(self):
+        """Video kaynağı değiştiğinde çağrılır"""
+        video_source = self.video_source_var.get()
+        self.add_log(f"Video kaynağı değiştirildi: {video_source}")
+        
+        # Config dosyasını güncelle
+        try:
+            config = {}
+            if os.path.exists('config.json'):
+                with open('config.json', 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            
+            # Video kaynağını güncelle
+            config["video_source"] = video_source
+            
+            # Config'i kaydet
+            with open('config.json', 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.add_log(f"Video kaynağı kaydetme hatası: {str(e)}")
+            
+        # Seçilen kaynağa göre API anahtarı kontrolü
+        if video_source == "pexels":
+            if not self.pexels_api_var.get().strip():
+                self.add_log("Uyarı: Pexels API anahtarı ayarlanmamış. API Keys sayfasından ayarlayın.")
+        elif video_source == "pixabay":
+            if not self.pixabay_api_var.get().strip():
+                self.add_log("Uyarı: Pixabay API anahtarı ayarlanmamış. API Keys sayfasından ayarlayın.")
 
 def main():
     """Uygulamayı başlatır"""

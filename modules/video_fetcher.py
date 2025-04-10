@@ -15,6 +15,10 @@ from concurrent.futures import ThreadPoolExecutor
 from openai import OpenAI
 from utils.shell_utils import run_command, is_windows
 
+# Yeni sağlayıcıları import et
+from modules.pexels_provider import PexelsProvider
+from modules.pixabay_provider import PixabayProvider
+
 # Eski fonksiyonlar yorum satırına alındı
 """
 def fetch_videos(keywords: List[str], api_key: str, project_folder: str) -> List[str]:
@@ -529,11 +533,11 @@ async def download_video(video_url: str, destination: str) -> str:
             os.remove(temp_file)
         return ""
 
-# Ana video arama fonksiyonu - dil parametresi eklendi
+# Ana video arama fonksiyonu - video_source parametresi eklendi
 async def fetch_videos(keywords: List[str], pexels_api_key: str, openai_api_key: str, topic: str, content: List[str], 
-                       project_folder: str, min_score: float = 5.0, language: str = "tr") -> List[str]:
+                       project_folder: str, min_score: float = 5.0, language: str = "tr", video_source: str = None) -> List[str]:
     """
-    Pexels API kullanarak anahtar kelimelere göre video arar ve indirir
+    Seçilen video sağlayıcısı API'si kullanarak anahtar kelimelere göre video arar ve indirir
     Her video için OpenAI API ile ilgi düzeyi değerlendirmesi yapar
     
     Args:
@@ -545,84 +549,47 @@ async def fetch_videos(keywords: List[str], pexels_api_key: str, openai_api_key:
         project_folder (str): Proje klasörünün yolu
         min_score (float): Minimum ilgi düzeyi puanı (0-10 arasında)
         language (str): Anahtar kelimelerin dili (default: "tr")
-    
+        video_source (str): Video kaynağı ("pexels" veya "pixabay")
+        
     Returns:
         List[str]: İndirilen video dosyalarının yolları
     """
     # Video klasörlerini oluştur
-    video_folder = os.path.join(project_folder, "pexels_videos")
-    os.makedirs(video_folder, exist_ok=True)
+    os.makedirs(project_folder, exist_ok=True)
     
-    # Thumbnail klasörü
-    temp_folder = os.path.join(project_folder, "temp_thumbs")
-    os.makedirs(temp_folder, exist_ok=True)
+    # Kaynak yoksa config'den oku
+    if video_source is None:
+        try:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                    video_source = config.get("video_source", "pexels")
+            else:
+                video_source = "pexels"  # Varsayılan
+        except:
+            video_source = "pexels"  # Hata durumunda varsayılan
     
-    # API anahtarlarını kontrol et
-    if not pexels_api_key:
-        print("Uyarı: Pexels API anahtarı boş!")
-        return []
+    # Video kaynağını normalize et
+    video_source = video_source.lower()
+    print(f"Kullanılan video kaynağı: {video_source}")
     
-    if not openai_api_key:
-        print("Uyarı: OpenAI API anahtarı boş!")
-        return []
+    # Uygun sağlayıcıyı seç
+    if video_source == "pixabay":
+        # config.json'dan pixabay_api_key'i oku
+        pixabay_api_key = ""
+        try:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                    pixabay_api_key = config.get("pixabay_api_key", "")
+        except:
+            pass
+        
+        provider = PixabayProvider(pixabay_api_key or "", openai_api_key)
+    else:
+        provider = PexelsProvider(pexels_api_key, openai_api_key)
     
-    # Videoları ara - İngilizce arama için dil kodunu gönder
-    videos = await search_videos_by_keywords(keywords, pexels_api_key, openai_api_key, language)
-    
-    if not videos:
-        print("Hiç video bulunamadı!")
-        return []
-    
-    # Thumbnailleri indir
-    async with aiohttp.ClientSession() as session:
-        thumbnail_tasks = [download_thumbnail(session, video, temp_folder) for video in videos]
-        thumbnail_results = await asyncio.gather(*thumbnail_tasks)
-    
-    # Başarılı thumbnail indirmelerini topla
-    successful_thumbnails = [(video, thumb_path) for video, thumb_path in thumbnail_results if thumb_path]
-    
-    # Thumbnailleri değerlendir
-    evaluation_tasks = [evaluate_thumbnail_relevance(thumb_path, topic, content, openai_api_key) 
-                        for video, thumb_path in successful_thumbnails]
-    evaluation_results = await asyncio.gather(*evaluation_tasks)
-    
-    # Thumbnailleri puanlara göre eşleştir
-    scored_videos = []
-    for i, (_, score) in enumerate(evaluation_results):
-        if score >= min_score:
-            video_info = successful_thumbnails[i][0]
-            video_info["score"] = score
-            scored_videos.append(video_info)
-    
-    # Puanlara göre sırala (en yüksek önce)
-    scored_videos.sort(key=lambda x: x["score"], reverse=True)
-    
-    print(f"Minimum puan {min_score}/10 üzerinde {len(scored_videos)} video bulundu.")
-    
-    # En iyi videoları indir (en fazla 5 adet)
-    download_limit = min(5, len(scored_videos))
-    videos_to_download = scored_videos[:download_limit]
-    
-    # Videoları asenkron olarak indir
-    download_tasks = []
-    for i, video in enumerate(videos_to_download):
-        video_path = os.path.join(video_folder, f"video_{video['keyword']}_{i+1}.mp4")
-        download_tasks.append(download_video(video["video_url"], video_path))
-    
-    downloaded_videos = await asyncio.gather(*download_tasks)
-    
-    # Boş olmayan yolları filtrele
-    successful_downloads = [path for path in downloaded_videos if path]
-    
-    # Geçici klasörü temizle
-    try:
-        shutil.rmtree(temp_folder)
-    except Exception as e:
-        print(f"Geçici klasör silme hatası: {str(e)}")
-    
-    # En az bir video indirildi mi kontrol et
-    if not successful_downloads:
-        print("Hiç video indirilemedi, varsayılan video kullanılacak...")
-        # Buraya varsayılan video ekleme kodu gelebilir
-    
-    return successful_downloads
+    # Videoları ara ve indir
+    return await provider.fetch_videos(keywords, topic, content, project_folder, min_score, language)
