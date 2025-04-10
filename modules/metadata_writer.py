@@ -26,7 +26,7 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         if not api_key:
             # Fallback if no API key
             return {
-                "title": f"Interesting Facts About {topic.title()}",
+                "title": f"ŞOKE EDECEK {topic.title()} GERÇEKLER 😱🤯",
                 "description": "\n\n".join(content) + "\n\n#Shorts #Educational #Knowledge",
                 "tags": ["educational", "shorts", "facts", "knowledge"] + topic.lower().split()
             }
@@ -39,43 +39,44 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         
         # Generate optimized metadata with OpenAI
         prompt = f"""
-        Create YouTube Shorts metadata for a video about "{topic}". The video content is:
+        Sen bir viral YouTube Shorts ve TikTok içerik uzmanısın. "{topic}" konulu bir video için aşırı clickbait ve izlenmesi yüksek metadata üretmen gerekiyor.
         
+        Video içeriği:
         {full_content}
         
-        Generate the following:
-        1. A catchy title (max 60 chars) that includes the topic and will get clicks
-        2. An engaging description that summarizes the content and includes hashtags
-        3. 8-10 relevant tags (single words or short phrases, no hashtags in tags)
-        4. The most appropriate YouTube category ID number from this list:
-           - 1: Film & Animation
-           - 2: Autos & Vehicles
-           - 10: Music
-           - 15: Pets & Animals
-           - 17: Sports
-           - 18: Short Movies
-           - 19: Travel & Events
-           - 20: Gaming
-           - 22: People & Blogs
-           - 23: Comedy
-           - 24: Entertainment
-           - 25: News & Politics
-           - 26: Howto & Style
-           - 27: Education
-           - 28: Science & Technology
-           - 29: Nonprofit & Activism
+        Aşağıdakileri oluştur:
+        1. ŞOK EDİCİ, çok merak uyandıran ve HEMEN tıklanacak bir başlık (max 60 karakter). Başlık mutlaka BÜYÜK HARFLER içermeli ve "😱", "🤯" gibi emoji(ler) kullanmalı. İzleyicilerin geçip gitmesini ASLA istemiyoruz!
+        2. İzleyiciyi hemen yakalayacak açıklama. Her cümle başlığı desteklemeli ve merak uyandırmalı. Sonda mutlaka uygun hashtag'ler olmalı.
+        3. Viral olacak 8-10 ilgili etiket (tek kelimeler veya kısa ifadeler, hashtagsiz)
+        4. En uygun YouTube kategori kimliğini şu listeden seç:
+           - 1: Film & Animasyon
+           - 2: Otomobil & Taşıtlar
+           - 10: Müzik
+           - 15: Evcil Hayvanlar & Hayvanlar
+           - 17: Spor
+           - 18: Kısa Filmler
+           - 19: Seyahat & Olaylar
+           - 20: Oyun
+           - 22: Kişiler & Bloglar
+           - 23: Komedi
+           - 24: Eğlence
+           - 25: Haberler & Politika
+           - 26: Nasıl Yapılır & Stil
+           - 27: Eğitim
+           - 28: Bilim & Teknoloji
+           - 29: Kâr Amacı Gütmeyen & Aktivizm
         
-        Format as JSON with keys: "title", "description", "tags" (as array), "category_id" (as string)
+        Yanıtını şu JSON formatında ver: {{"title": "...", "description": "...", "tags": [...], "category_id": "..."}}
         """
         
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a YouTube metadata specialist who creates engaging titles and descriptions."},
+                {"role": "system", "content": "Sen viral YouTube Shorts ve TikTok kanalları için içerik stratejisti olarak çalışıyorsun. İzlenme oranlarını patlatacak içerikler üretmekte ustasın."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.7
+            temperature=0.8
         )
         
         # Parse JSON response
@@ -83,13 +84,13 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         
         # Ensure values exist and are properly formatted
         if "title" not in metadata or not metadata["title"]:
-            metadata["title"] = f"Amazing Facts About {topic.title()} | Shorts"
+            metadata["title"] = f"ŞOKE EDECEK {topic.title()} GERÇEKLER! 😱🤯"
             
         if "description" not in metadata or not metadata["description"]:
-            metadata["description"] = "\n\n".join(content) + "\n\n#Shorts #Educational #Knowledge"
+            metadata["description"] = "\n\n".join(content) + "\n\n#Shorts #Educational #Knowledge #Viral #MustWatch"
             
         if "tags" not in metadata or not metadata["tags"] or not isinstance(metadata["tags"], list):
-            metadata["tags"] = ["educational", "shorts", "facts", "knowledge"] + topic.lower().split()
+            metadata["tags"] = ["viral", "educational", "shorts", "facts", "mustwatch", "trending"] + topic.lower().split()
         
         if "category_id" not in metadata or not metadata["category_id"]:
             metadata["category_id"] = "27"  # Default to Education
@@ -100,9 +101,9 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         print(f"Error generating YouTube metadata: {str(e)}")
         # Fallback metadata
         return {
-            "title": f"Interesting Facts About {topic.title()}",
-            "description": "\n\n".join(content) + "\n\n#Shorts #Educational #Knowledge",
-            "tags": ["educational", "shorts", "facts", "knowledge"] + topic.lower().split(),
+            "title": f"ŞOKE EDECEK {topic.title()} GERÇEKLER! 😱🤯",
+            "description": "\n\n".join(content) + "\n\n#Shorts #Viral #MustWatch #Educational",
+            "tags": ["viral", "shorts", "facts", "mustwatch", "trending"] + topic.lower().split(),
             "category_id": "27"  # Education
         }
 

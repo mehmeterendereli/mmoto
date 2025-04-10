@@ -1002,12 +1002,22 @@ class MMotoApp(ctk.CTk):
             if not upload_to_youtube:
                 self.add_log("YouTube'a yükleme devre dışı bırakıldı")
             
-            # Yeni bir işlem başlatılıyorsa video sayacını sıfırla
-            if not hasattr(self, 'continuing_process') or not self.continuing_process:
-                self.global_video_counter = 0
-                self.add_log(f"Video sayacı sıfırlandı")
+            # Devam eden işlem kontrolü
+            is_continuing = hasattr(self, 'continuing_process') and self.continuing_process
+            
+            # Devam eden bir işlem değilse ve sürekli mod değilse, sayacı sıfırla
+            if not is_continuing:
+                # Sadece yeni bir işlem başlatılıyor ve sürekli çalışma modu değilse sayacı sıfırla
+                if not continuous:
+                    self.global_video_counter = 0
+                    self.add_log(f"Video sayacı sıfırlandı")
+                else:
+                    # Sürekli modda başlangıçta sayaç yoksa başlat
+                    if not hasattr(self, 'global_video_counter'):
+                        self.global_video_counter = 0
+                        self.add_log(f"Video sayacı başlatıldı")
             else:
-                # Devam eden bir işlem zinciri olduğunu belirt
+                # Devam eden işlem işaretini temizle
                 self.continuing_process = False
                 
                 # Maksimum video sayısı kontrolü
@@ -1103,6 +1113,7 @@ class MMotoApp(ctk.CTk):
                             self.add_log(_("preparing_next_video"))
                             
                             # Yeni işlemi başlat
+                            self.continuing_process = True
                             self.after(2000, self.start_process)
                     except Exception as e:
                         self.add_log(f"{_('error_prefix')}{str(e)}")
@@ -1125,8 +1136,10 @@ class MMotoApp(ctk.CTk):
             # Genel işlem durumu
             global_processing_state = {}
             
-            # Üretilen video sayısını takip etmek için sayaç
-            global_video_counter = getattr(self, 'global_video_counter', 0)
+            # Üretilen video sayısını takip etmek için sayaç - doğrudan sınıf değişkenini kullan
+            # Eğer değişken tanımlı değilse oluştur
+            if not hasattr(self, 'global_video_counter'):
+                self.global_video_counter = 0
             
             # Log mesajları
             self.add_log(f"{_('process_started')}: {topic}")
@@ -1134,12 +1147,12 @@ class MMotoApp(ctk.CTk):
                 self.add_log(_("continuous_mode_enabled"))
                 # Maksimum video sayısı bilgisini göster
                 if max_videos is not None:
-                    self.add_log(f"Maksimum {max_videos} video üretilecek. Şu ana kadar üretilen: {global_video_counter}")
+                    self.add_log(f"Maksimum {max_videos} video üretilecek. Şu ana kadar üretilen: {self.global_video_counter}")
                 else:
-                    self.add_log(f"Sınırsız video üretim modu. Şu ana kadar üretilen: {global_video_counter}")
+                    self.add_log(f"Sınırsız video üretim modu. Şu ana kadar üretilen: {self.global_video_counter}")
                 
             # Video limiti kontrolü - sürekli modda ve belirli bir limite ulaşıldıysa
-            if continuous and max_videos is not None and global_video_counter >= max_videos:
+            if continuous and max_videos is not None and self.global_video_counter >= max_videos:
                 self.add_log(f"Maksimum video sayısına ({max_videos}) ulaşıldı. İşlem sonlandırılıyor.")
                 self.process_completed()
                 # Sürekli çalışma modunu kapat
@@ -1214,9 +1227,8 @@ class MMotoApp(ctk.CTk):
                 # Başarıyla tamamlandığını belirt
                 if success:
                     # Video sayacını artır
-                    global_video_counter += 1
-                    self.global_video_counter = global_video_counter
-                    self.add_log(f"Video başarıyla oluşturuldu ({global_video_counter}/{max_videos if max_videos is not None else 'Sınırsız'})")
+                    self.global_video_counter += 1
+                    self.add_log(f"Video başarıyla oluşturuldu ({self.global_video_counter}/{max_videos if max_videos is not None else 'Sınırsız'})")
                     self.add_log(_("process_completed"))
                 else:
                     self.add_log(_("process_failed"), True)
@@ -1232,7 +1244,7 @@ class MMotoApp(ctk.CTk):
             # Sürekli mod aktif ise ve işlem başarılıysa, kısa bir beklemeden sonra yeni işlemi başlat
             if continuous and global_processing_state.get("success", False) and self.continuous_var.get():
                 # Maksimum video sayısı kontrolü
-                if max_videos is not None and global_video_counter >= max_videos:
+                if max_videos is not None and self.global_video_counter >= max_videos:
                     self.add_log(f"Maksimum video sayısına ({max_videos}) ulaşıldı. İşlem sonlandırılıyor.")
                     # Sürekli çalışma modunu kapat
                     self.continuous_var.set(False)

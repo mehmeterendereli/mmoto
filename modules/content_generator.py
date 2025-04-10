@@ -77,40 +77,44 @@ def generate_content(topic: str, language: str = "tr") -> Dict[str, Any]:
         # Set language-specific settings
         lang_settings = {
             "tr": {
-                "system_message": "Kısa ve bilgilendirici içerikler üreten bir asistansın.",
+                "system_message": "Sen TikTok ve YouTube Shorts için viral içerik üreten bir uzmansın. İnsanların dikkatini hemen çekecek şok edici, merak uyandırıcı ve ilgi çekici içerikler yaratmada ustasın.",
                 "prompt_template": f"""
-                {topic} hakkında kısa, bilgilendirici bir metin yaz.
-                Bu metin bir video için TTS tarafından seslendirilecek.
+                {topic} hakkında viral olabilecek, ilgi çekici ve merak uyandıran bir içerik yaz.
+                Bu içerik YouTube Shorts veya TikTok'ta seslendirilecek.
                 
-                Önemli Kurallar:
-                1. Metin doğrudan konuya girmeli, "merhaba, bugün ... hakkında konuşacağım" gibi gereksiz girişler olmamalı
-                2. Her cümle ayrı bir paragraf olmalı, liste veya numaralandırılmış öğeler kullanma
-                3. Toplam 7 cümle ve tüm metin seslendirildiğinde yaklaşık 45 saniye sürmelidir (ASLA 50 saniyeyi geçmemeli)
-                4. Her cümle anlamlı ve eğitici olmalı
-                5. Hedef kitle genel izleyiciler, bu nedenle teknik olmayan bir dil kullan
-                6. Her cümle 12-20 kelime uzunluğunda ve Türkçe olmalı
-                7. Metin sadece düz cümlelerden oluşmalı, toplamda sadece 7 cümle
-                8. Her cümle doğal olması için 2-4 saniyelik nefes alma molaları içermeli
+                Kritik Kurallar:
+                1. İLK CÜMLE MUTLAKA İZLEYİCİYİ ŞAŞIRTACAK, ŞOK EDECEK veya çok merak uyandıracak bir bilgi/iddia içermeli
+                2. İkinci cümle ilk cümledeki şaşırtıcı bilgiyi desteklemeli veya daha da ilginç hale getirmeli
+                3. Diğer cümleler "ama asıl şaşırtıcı olan şu ki...", "kimsenin bilmediği gerçek şu...", "inanılmaz olan ise..." gibi ilgi çekici ifadelerle başlamalı
+                4. Her cümle ayrı bir paragraf olmalı, liste veya numaralandırılmış öğeler kullanma
+                5. Toplam 7 cümle ve tüm metin seslendirildiğinde yaklaşık 45 saniye sürmelidir (ASLA 50 saniyeyi geçmemeli)
+                6. Her cümle anlamlı ve eğitici olmalı, fakat abartılı ve dramatik bir dil kullanılmalı
+                7. Her cümle 12-20 kelime uzunluğunda ve Türkçe olmalı
+                8. İçerik, istatistikler, sayılar ve şaşırtıcı karşılaştırmalar içermeli
+                9. Son cümle izleyiciyi şaşırtacak bir bilgi veya düşündürücü bir soru ile bitmelidir
+                10. İzleyiciyi ikinci şahıs (sen/siz) olarak adreslemekten çekinme, bu bağlantıyı güçlendirir
                 
                 Lütfen yukarıdaki kurallara tamamen uyan, TTS tarafından okunduğunda 35-45 saniye sürecek toplam 7 cümlelik bir metin oluştur.
                 Her cümleyi ayrı bir paragraf olarak sağla.
                 """
             },
             "en": {
-                "system_message": "You are an assistant that creates short, informative content.",
+                "system_message": "You are an expert creator of viral content for TikTok and YouTube Shorts. You excel at creating shocking, curiosity-inducing and attention-grabbing content that hooks viewers instantly.",
                 "prompt_template": f"""
-                Write a short, informative text about {topic}.
-                This text will be narrated by TTS for a video.
+                Write a viral, attention-grabbing text about {topic} that will hook viewers instantly.
+                This text will be narrated for YouTube Shorts or TikTok.
                 
-                Important Rules:
-                1. The text should get straight to the point, no unnecessary introductions like "hello, today I'll talk about..."
-                2. Each sentence should be a separate paragraph, no lists or numbered items
-                3. Total of 7 sentences and the entire text should take approximately 45 seconds when narrated (NEVER exceed 50 seconds)
-                4. Each sentence should be meaningful and educational
-                5. Target audience is general viewers, so use non-technical language
-                6. Each sentence should be between 12-20 words in length and in English
-                7. The text should consist of only plain sentences, just 7 sentences in total
-                8. Each sentence should include a 2-4 second breathing pause (for naturalness)
+                Critical Rules:
+                1. THE FIRST SENTENCE MUST CONTAIN a SHOCKING fact/claim that will SURPRISE viewers or create extreme curiosity
+                2. The second sentence should support the shocking first sentence or make it even more interesting
+                3. Other sentences should start with phrases like "but what's really shocking is...", "the hidden truth is...", "what's incredible is..."
+                4. Each sentence should be a separate paragraph, no lists or numbered items
+                5. Total of 7 sentences and the entire text should take approximately 45 seconds when narrated (NEVER exceed 50 seconds)
+                6. Each sentence should be meaningful and educational, but use exaggerated and dramatic language
+                7. Each sentence should be between 12-20 words in length and in English
+                8. Include statistics, numbers, and surprising comparisons
+                9. The final sentence should end with a shocking fact or thought-provoking question
+                10. Don't hesitate to address the viewer in second person (you), as this strengthens connection
                 
                 Please create a text that fully complies with the above rules, with a total of 7 sentences that will take 35-45 seconds when read by TTS.
                 Provide each sentence as a separate paragraph.
@@ -134,26 +138,6 @@ def generate_content(topic: str, language: str = "tr") -> Dict[str, Any]:
                 
                 Por favor, crea un texto que cumpla completamente con las reglas anteriores, con un total de 7 oraciones que tomarán 35-45 segundos cuando sean leídas por TTS.
                 Proporciona cada oración como un párrafo separado.
-                """
-            },
-            "fr": {
-                "system_message": "Vous êtes un assistant qui crée du contenu court et informatif.",
-                "prompt_template": f"""
-                Écrivez un texte court et informatif sur {topic}.
-                Ce texte sera narré par TTS pour une vidéo.
-                
-                Règles importantes:
-                1. Le texte doit aller droit au but, sans introductions inutiles comme "bonjour, aujourd'hui je vais parler de..."
-                2. Chaque phrase doit être un paragraphe séparé, pas de listes ou d'éléments numérotés
-                3. Un total de 7 phrases et le texte entier devrait prendre environ 45 secondes lorsqu'il est narré (NE JAMAIS dépasser 50 secondes)
-                4. Chaque phrase doit être significative et éducative
-                5. Le public cible est le grand public, utilisez donc un langage non technique
-                6. Chaque phrase doit comporter entre 12 et 20 mots et être en français
-                7. Le texte ne doit comporter que des phrases simples, seulement 7 phrases au total
-                8. Chaque phrase doit inclure une pause respiratoire de 2 à 4 secondes (pour le naturel)
-                
-                Veuillez créer un texte qui respecte pleinement les règles ci-dessus, avec un total de 7 phrases qui prendront 35 à 45 secondes lorsqu'elles seront lues par TTS.
-                Fournissez chaque phrase comme un paragraphe séparé.
                 """
             },
             "de": {
@@ -318,11 +302,32 @@ def generate_content(topic: str, language: str = "tr") -> Dict[str, Any]:
             }
         }
         
-        # Default to English if language not supported
-        selected_language = language if language in lang_settings else "en"
+        # Add default settings for other languages
+        default_settings = {
+            "system_message": "You are an expert creator of viral content for TikTok and YouTube Shorts. You excel at creating shocking, curiosity-inducing content that hooks viewers instantly.",
+            "prompt_template": f"""
+            Write a viral, attention-grabbing text about {topic} that will hook viewers instantly.
+            This text will be narrated for YouTube Shorts or TikTok.
+            
+            Critical Rules:
+            1. THE FIRST SENTENCE MUST CONTAIN a SHOCKING fact/claim that will SURPRISE viewers or create extreme curiosity
+            2. The second sentence should support the shocking first sentence or make it even more interesting
+            3. Other sentences should start with phrases like "but what's really shocking is...", "the hidden truth is...", "what's incredible is..."
+            4. Each sentence should be a separate paragraph, no lists or numbered items
+            5. Total of 7 sentences and the entire text should take approximately 45 seconds when narrated (NEVER exceed 50 seconds)
+            6. Each sentence should be meaningful and educational, but use exaggerated and dramatic language
+            7. Each sentence should be between 12-20 words in length
+            8. Include statistics, numbers, and surprising comparisons
+            9. The final sentence should end with a shocking fact or thought-provoking question
+            10. Don't hesitate to address the viewer in second person (you), as this strengthens connection
+            
+            Please create a text in {language} that fully complies with the above rules, with a total of 7 sentences that will take 35-45 seconds when read by TTS.
+            Provide each sentence as a separate paragraph.
+            """
+        }
         
-        # Get language settings
-        settings = lang_settings[selected_language]
+        # Get language settings (or use default if not defined)
+        settings = lang_settings.get(language, default_settings)
         
         # Send request
         response = client.chat.completions.create(
@@ -359,74 +364,8 @@ def generate_content(topic: str, language: str = "tr") -> Dict[str, Any]:
     
     except Exception as e:
         print(f"Content generation error: {str(e)}")
-        # Return dummy content in case of error
-        dummy_messages = {
-            "tr": [
-                f"{topic} hakkında içerik oluşturulurken bir hata oluştu.",
-                "API ile iletişimde bir sorun oluştu.",
-                "Lütfen daha sonra tekrar deneyin."
-            ],
-            "en": [
-                f"An error occurred while creating content about {topic}.",
-                "There was a problem communicating with the API.",
-                "Please try again later."
-            ],
-            "es": [
-                f"Ocurrió un error al crear contenido sobre {topic}.",
-                "Hubo un problema al comunicarse con la API.",
-                "Por favor, inténtelo de nuevo más tarde."
-            ],
-            "fr": [
-                f"Une erreur s'est produite lors de la création du contenu sur {topic}.",
-                "Il y a eu un problème de communication avec l'API.",
-                "Veuillez réessayer plus tard."
-            ],
-            "de": [
-                f"Beim Erstellen von Inhalten zu {topic} ist ein Fehler aufgetreten.",
-                "Es gab ein Problem bei der Kommunikation mit der API.",
-                "Bitte versuchen Sie es später noch einmal."
-            ],
-            "it": [
-                f"Si è verificato un errore durante la creazione del contenuto su {topic}.",
-                "C'è stato un problema di comunicazione con l'API.",
-                "Si prega di riprovare più tardi."
-            ],
-            "pt": [
-                f"Ocorreu um erro ao criar conteúdo sobre {topic}.",
-                "Houve um problema ao se comunicar com a API.",
-                "Por favor, tente novamente mais tarde."
-            ],
-            "ru": [
-                f"Произошла ошибка при создании контента о {topic}.",
-                "Возникла проблема при связи с API.",
-                "Пожалуйста, повторите попытку позже."
-            ],
-            "zh": [
-                f"创建关于{topic}的内容时出错。",
-                "与API通信时出现问题。",
-                "请稍后再试。"
-            ],
-            "ja": [
-                f"{topic}に関するコンテンツの作成中にエラーが発生しました。",
-                "APIとの通信に問題がありました。",
-                "後でもう一度お試しください。"
-            ],
-            "ko": [
-                f"{topic}에 대한 콘텐츠를 만드는 동안 오류가 발생했습니다.",
-                "API와 통신하는 데 문제가 있었습니다.",
-                "나중에 다시 시도해 주세요."
-            ],
-            "ar": [
-                f"حدث خطأ أثناء إنشاء محتوى حول {topic}.",
-                "كانت هناك مشكلة في التواصل مع API.",
-                "يرجى المحاولة مرة أخرى لاحقًا."
-            ]
-        }
-        
-        # Default to English if language not supported
-        selected_language = language if language in dummy_messages else "en"
-        
+        # Return error message
         return {
             "topic": topic,
-            "response": dummy_messages[selected_language]
+            "response": [f"Error generating content: {str(e)}"]
         } 

@@ -50,18 +50,15 @@ def save_topic_to_history(topic):
 
 def generate_topic(api_key, category=None):
     """
-    GPT-4o API kullanarak özgün bir konu üretir
+    GPT-4o API kullanarak viral YouTube Shorts başlığı üretir
     
     Args:
         api_key (str): OpenAI API anahtarı
         category (str, optional): Konu kategorisi. Belirtilmezse rastgele kategori seçilir.
     
     Returns:
-        str: Üretilen konu
+        str: Üretilen başlık
     """
-    # Daha önce üretilmiş konuları yükle
-    previous_topics = load_topics_history()
-    
     # Kategori seçimi
     categories = [
         "Bilim", "Tarih", "Teknoloji", "Doğa", "Uzay", "İlginç Bilgiler",
@@ -72,46 +69,56 @@ def generate_topic(api_key, category=None):
     if not category:
         category = random.choice(categories)
     
+    # Daha önce kullanılmış başlıkları kontrol et (tekrarları önlemek için)
+    previous_topics = []
+    stats_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stats")
+    topics_file = os.path.join(stats_folder, "topics.json")
+    
+    if os.path.exists(topics_file):
+        try:
+            with open(topics_file, "r", encoding="utf-8") as f:
+                previous_topics = json.load(f)
+        except:
+            previous_topics = []
+    
+    # Son 20 başlığı al (çok uzunsa)
+    previous_topics_str = ", ".join(previous_topics[-20:]) if previous_topics else "Henüz başlık yok"
+    
     try:
         # OpenAI istemcisini başlat
         client = OpenAI(api_key=api_key)
         
-        # Daha önce üretilmiş konular hakkında bilgi ver
-        previous_topics_str = ", ".join(previous_topics[-10:]) if previous_topics else "Henüz konu üretilmedi"
-        
         # GPT-4o ile konu üretimi - viral başlık formatında
         prompt = f"""
-        Act as a viral YouTube Shorts content strategist for a Turkish channel named "Merak Makinesi". Generate an engaging, curiosity-driven video title using viral language and relevant emojis.
+        Sen viral YouTube Shorts ve TikTok başlıkları üreten bir uzmansın. "Merak Makinesi" isimli bir Türkçe kanal için en yüksek tıklama oranına sahip olacak başlıklar üretmekle görevlisin.
 
-        Use formats like:
-        - "Ya... olsaydı?" (What If...)
-        - "Neden...?" (Why...)
-        - "Nasıl...?" (How...)
-        - "İşte bu yüzden..." (This Is Why...)
-        - "İnanamayacaksın..." (You Won't Believe...)
-        - "Arkasındaki Sır..." (The Secret Behind...)
+        MÜKEMMEL BİR YOUTUBE SHORTS BAŞLIĞI ÜRET.
+
+        BAŞLIK KRİTERLERİ:
+        1. ZORUNLU: "🤯" veya "😱" içeren ŞOK EDİCİ bir başlık olmalı
+        2. Başlıkta mutlaka BÜYÜK HARFLER kullanılmalı
+        3. Başlık izleyiciyi HEMEN tıklatacak kadar merak uyandırmalı
+        4. Şu kelimelerden birini içermeli: "İNANILMAZ", "ŞOKE", "SIR", "GİZLİ", "YASAKLI", veya "İMKANSIZ"
+        5. Şu formatlardan birini kullan (ama tam olarak kopyalama, sadece ilham al):
+           - "HERKES ŞOKTA! [konu] Hakkında İNANILMAZ Gerçek! 😱"
+           - "KİMSE BİLMİYORDU! [konu] Hakkındaki GİZLİ SIR! 🤯"
+           - "BAKMAYI BIRAKAMAYACAKSIN! [konu] Nasıl [şaşırtıcı şey yapıyor]? 😱"
+           - "EĞER [konu] Hakkında Bunu Bilmiyorsan HER ŞEYİ YANLIŞ Yapıyorsun! 🤯"
+           - "BİLİM İNSANLARI ŞOK! [konu] Aslında [beklenmedik durum]... 😱"
+        6. Toplam 5-10 kelime arasında olmalı
+        7. Başlık %100 Türkçe olmalı
+        8. Kategori: {category}
+        9. Daha önce benzer başlıklar kullanılmamalı
+        10. İnsanların HEMEN tıklamak isteyeceği kadar merak uyandırıcı olmalı
         
-        The title should be between 5-10 words, include at least 1-2 emojis related to the topic, and be optimized to grab attention in YouTube Shorts.
-        
-        Category: {category}
-        
-        Important Rules:
-        1. Title should be in Turkish
-        2. Must be clickable and spark curiosity
-        3. Should be short and catchy (5-10 words)
-        4. Must include 1-2 relevant emojis
-        5. Should focus on trending or evergreen topics
-        6. Should not be similar to these previous titles: {previous_topics_str}
-        7. Question format works well (e.g. "Dünya Dönmeyi Durdurursa Ne Olur? 🌍💥")
-        
-        Output only the title, no explanation or additional text.
+        SADECE KLİCKBAİT BAŞLIĞI YAZ, ek açıklama veya metin ekleme.
         """
         
         # API isteği
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Sen viral YouTube Shorts başlıkları üreten bir uzmansın. Başlık üretirken emoji kullanmayı unutma."},
+                {"role": "system", "content": "Sen viral YouTube Shorts başlıkları üreten bir uzmansın. Başlık üretirken emoji kullanmayı asla unutma. Başlıklar çok şok edici olmalı."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.9,
@@ -124,40 +131,23 @@ def generate_topic(api_key, category=None):
         # Başında veya sonunda gereksiz karakterler varsa temizle
         topic = topic.strip('"\'.,;:!?')
         
-        # Konuyu geçmişe kaydet
-        save_topic_to_history(topic)
+        # Üretilen konuyu kaydet
+        if os.path.exists(stats_folder):
+            if topic not in previous_topics:
+                previous_topics.append(topic)
+                try:
+                    with open(topics_file, "w", encoding="utf-8") as f:
+                        json.dump(previous_topics, f, ensure_ascii=False, indent=4)
+                except:
+                    pass
+        
+        print(f"Üretilen başlık: {topic}")
         
         return topic
         
     except Exception as e:
-        logging.error(f"Konu üretme hatası: {str(e)}")
-        
-        # Hata durumunda varsayılan konular
-        default_topics = [
-            "Dünya Dönmeyi Durdurursa Ne Olur? 🌍💥",
-            "İşte Bu Yüzden Rüya Görüyorsun 🧠💤",
-            "Evren Ne Kadar Büyük? 🌌😱",
-            "Ağaçların Gizli Dili 🌳🗣️",
-            "Uçaklar Neden Pasifik Okyanusundan Kaçınır? ✈️🌊",
-            "Ay Bir Gün Yok Olursa Ne Olur? 🌕🚫",
-            "Yapay Zeka Gerçekten Düşünebilir Mi? 🤖🧠",
-            "Neden Çocukluk Anılarımızı Unutuyoruz? 👶🧠",
-            "Dinozorlar Hala Yaşasaydı Ne Olurdu? 🦖🌍",
-            "Dünyanın En Derin Deliği 🌍🕳️",
-            "Neden Tüylerimiz Diken Diken Olur? 😨🧬",
-            "Kara Deliklerde Ne Olur? 🕳️💫",
-            "Piramitler Hakkında Gerçekler 🏜️🔺"
-        ]
-        
-        # Daha önce kullanılmamış bir konu seç
-        for topic in default_topics:
-            if topic not in previous_topics:
-                save_topic_to_history(topic)
-                return topic
-        
-        # Hepsi kullanılmışsa rastgele bir tane seç
-        topic = random.choice(default_topics)
-        return topic
+        print(f"Başlık üretimi hatası: {str(e)}")
+        return f"Bilgilendirici Videolar: {category}"
 
 def generate_english_topic(api_key, category=None):
     """
