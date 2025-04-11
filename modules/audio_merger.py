@@ -7,6 +7,156 @@ from typing import List
 import tempfile
 import shutil
 import json
+import sys
+import platform
+
+def detect_hardware_acceleration():
+    """
+    Sistemde mevcut donanım hızlandırma özelliklerini tespit eder
+    
+    Returns:
+        dict: Mevcut donanım hızlandırma özellikleri ve uygun FFmpeg parametreleri
+    """
+    hw_accel = {
+        "available": False,
+        "type": None,
+        "params": []
+    }
+    
+    # Windows için NVIDIA GPU tespiti
+    if platform.system() == "Windows":
+        try:
+            # NVIDIA GPU kontrolü
+            nvidia_check = subprocess.run("nvidia-smi", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if nvidia_check.returncode == 0:
+                hw_accel["available"] = True
+                hw_accel["type"] = "nvidia"
+                hw_accel["params"] = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+                print("NVIDIA GPU tespit edildi, CUDA hızlandırma kullanılacak")
+                return hw_accel
+                
+            # Intel GPU kontrolü
+            if os.path.exists("C:\\Program Files\\Intel\\Media SDK"):
+                hw_accel["available"] = True
+                hw_accel["type"] = "intel"
+                hw_accel["params"] = ["-hwaccel", "qsv"]
+                print("Intel GPU tespit edildi, QSV hızlandırma kullanılacak")
+                return hw_accel
+        except:
+            pass
+    
+    # Linux için GPU tespiti
+    elif platform.system() == "Linux":
+        try:
+            # NVIDIA GPU kontrolü
+            nvidia_check = subprocess.run("which nvidia-smi", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if nvidia_check.returncode == 0:
+                hw_accel["available"] = True
+                hw_accel["type"] = "nvidia"
+                hw_accel["params"] = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+                print("NVIDIA GPU tespit edildi, CUDA hızlandırma kullanılacak")
+                return hw_accel
+                
+            # VAAPI kontrolü (AMD ve Intel için)
+            vaapi_check = subprocess.run("vainfo", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if vaapi_check.returncode == 0:
+                hw_accel["available"] = True
+                hw_accel["type"] = "vaapi"
+                hw_accel["params"] = ["-hwaccel", "vaapi", "-vaapi_device", "/dev/dri/renderD128"]
+                print("VAAPI destekli GPU tespit edildi, VAAPI hızlandırma kullanılacak")
+                return hw_accel
+        except:
+            pass
+    
+    # macOS için Metal kontrolü
+    elif platform.system() == "Darwin":
+        hw_accel["available"] = True
+        hw_accel["type"] = "videotoolbox"
+        hw_accel["params"] = ["-hwaccel", "videotoolbox"]
+        print("macOS videotoolbox hızlandırma etkinleştirildi")
+        return hw_accel
+    
+    print("Donanım hızlandırma tespit edilemedi, yazılım kodlama kullanılacak")
+    return hw_accel
+
+def get_optimized_ffmpeg_params(input_path, output_path, hw_accel):
+    """
+    En uygun FFmpeg parametrelerini getirir
+    
+    Args:
+        input_path (str): Giriş dosyasının yolu
+        output_path (str): Çıkış dosyasının yolu
+        hw_accel (dict): Donanım hızlandırma bilgileri
+        
+    Returns:
+        list: FFmpeg komut satırı parametreleri
+    """
+    # Temel parametreler
+    params = ["-y"]  # Mevcut dosyanın üzerine yaz
+    
+    # Donanım hızlandırma parametreleri
+    if hw_accel["available"]:
+        params.extend(hw_accel["params"])
+    
+    # Giriş dosyası
+    params.extend(["-i", input_path])
+    
+    # Video kodlayıcı ve optimizasyonlar
+    if hw_accel["available"]:
+        if hw_accel["type"] == "nvidia":
+            params.extend([
+                "-c:v", "h264_nvenc",
+                "-preset", "p4",
+                "-tune", "hq",
+                "-b:v", "5M",
+                "-maxrate", "5M",
+                "-bufsize", "5M"
+            ])
+        elif hw_accel["type"] == "intel":
+            params.extend([
+                "-c:v", "h264_qsv",
+                "-preset", "faster",
+                "-b:v", "5M"
+            ])
+        elif hw_accel["type"] == "vaapi":
+            params.extend([
+                "-vf", "format=nv12,hwupload",
+                "-c:v", "h264_vaapi",
+                "-b:v", "5M"
+            ])
+        elif hw_accel["type"] == "videotoolbox":
+            params.extend([
+                "-c:v", "h264_videotoolbox",
+                "-b:v", "5M",
+                "-maxrate", "5M",
+                "-bufsize", "5M"
+            ])
+    else:
+        # Yazılım kodlama - optimize edilmiş
+        params.extend([
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "22",
+            "-profile:v", "high",
+            "-pix_fmt", "yuv420p"
+        ])
+    
+    # Ses kodlayıcı
+    params.extend([
+        "-c:a", "aac",
+        "-b:a", "192k"
+    ])
+    
+    # Diğer hızlandırma parametreleri
+    params.extend([
+        "-movflags", "+faststart",   # Web'de daha hızlı oynatma
+        "-threads", str(min(os.cpu_count(), 16))  # Thread sayısını optimize et
+    ])
+    
+    # Çıkış dosyası
+    params.append(output_path)
+    
+    return params
 
 def merge_audio(video_path: str, audio_files: List[str], project_folder: str) -> str:
     """
@@ -37,6 +187,9 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
                     ffprobe_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), config["ffprobe_path"])
         except:
             pass
+    
+    # Donanım hızlandırma tespiti
+    hw_accel = detect_hardware_acceleration()
     
     if not os.path.exists(video_path):
         print(f"Hata: Video dosyası bulunamadı: {video_path}")
@@ -94,8 +247,27 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
                 speed_factor = video_duration / audio_duration
                 adjusted_video = os.path.join(project_folder, "adjusted_video.mp4")
                 
-                # Daha hassas hız ayarı için atempo filtresi ekle
-                adjust_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -filter:v "setpts={1/speed_factor}*PTS" -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p "{os.path.abspath(adjusted_video)}"'
+                # Donanım hızlandırma ile video işleme
+                base_params = [ffmpeg_path, "-i", os.path.abspath(video_path)]
+                
+                if hw_accel["available"]:
+                    base_params.extend(hw_accel["params"])
+                
+                # Hız ayarı için filter
+                filter_params = ["-filter:v", f"setpts={1/speed_factor}*PTS"]
+                
+                # Codec seçimi
+                if hw_accel["available"] and hw_accel["type"] == "nvidia":
+                    codec_params = ["-c:v", "h264_nvenc", "-preset", "p4"]
+                else:
+                    codec_params = ["-c:v", "libx264", "-preset", "fast", "-crf", "22"]
+                
+                # Diğer parametreler
+                output_params = ["-pix_fmt", "yuv420p", os.path.abspath(adjusted_video)]
+                
+                # Tam komutu oluştur
+                adjust_cmd_parts = base_params + filter_params + codec_params + output_params
+                adjust_cmd = " ".join([f'"{p}"' if " " in str(p) else str(p) for p in adjust_cmd_parts])
                 
                 try:
                     subprocess.run(adjust_cmd, shell=True, check=True)
@@ -112,8 +284,17 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
                 # Video süresini sese uygun şekilde kırp
                 trimmed_video = os.path.join(project_folder, "trimmed_video.mp4")
                 
-                # Videoyu ses süresine göre kırp, %5 tolerans ekle (daha hassas)
-                trim_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -t {audio_duration * 1.05} -c:v copy "{os.path.abspath(trimmed_video)}"'
+                # Optimize edilmiş kırpma komutu
+                trim_cmd_parts = [
+                    ffmpeg_path,
+                    "-y",
+                    "-i", os.path.abspath(video_path),
+                    "-t", str(audio_duration * 1.05),
+                    "-c:v", "copy",  # Yeniden kodlama yapmadan kopyala
+                    os.path.abspath(trimmed_video)
+                ]
+                
+                trim_cmd = " ".join([f'"{p}"' if " " in str(p) else str(p) for p in trim_cmd_parts])
                 
                 try:
                     subprocess.run(trim_cmd, shell=True, check=True)
@@ -138,7 +319,7 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
                     if os.path.exists(audio_file):
                         f.write(f"file '{os.path.abspath(audio_file)}'\n")
             
-            # Sesleri birleştir
+            # Sesleri birleştir - optimizasyon: -c copy kullanarak yeniden kodlama yapmadan birleştir
             concat_cmd = f'"{ffmpeg_path}" -f concat -safe 0 -i "{os.path.abspath(concat_list)}" -c copy "{os.path.abspath(merged_audio)}"'
             try:
                 print("Ses dosyaları birleştiriliyor...")
@@ -156,8 +337,50 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
         if os.path.exists(merged_audio) and os.path.getsize(merged_audio) > 0:
             print("Ses videoya ekleniyor...")
             
-            # Ses ve videoya uygun bir encoder seç, daha yüksek ses kalitesi
-            audio_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(merged_audio)}" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 256k -shortest -af "aresample=async=1000" "{os.path.abspath(audio_video)}"'
+            # Optimize edilmiş ses ekleme komutu
+            audio_video_params = get_optimized_ffmpeg_params(
+                os.path.abspath(video_path),
+                os.path.abspath(audio_video),
+                hw_accel
+            )
+            
+            # Parametre listesini oluştur
+            ffmpeg_cmd_parts = [ffmpeg_path]
+            
+            # Giriş dosyalarını ekle
+            ffmpeg_cmd_parts.extend(["-i", os.path.abspath(video_path), "-i", os.path.abspath(merged_audio)])
+            
+            # Map parametreleri
+            ffmpeg_cmd_parts.extend(["-map", "0:v", "-map", "1:a"])
+            
+            # -shortest parametresi - en kısa olanın uzunluğunu kullan
+            ffmpeg_cmd_parts.append("-shortest")
+            
+            # Ses senkronizasyonu için
+            ffmpeg_cmd_parts.extend(["-af", "aresample=async=1000"])
+            
+            # Donanım hızlandırma
+            if hw_accel["available"]:
+                if hw_accel["type"] == "nvidia":
+                    ffmpeg_cmd_parts.extend(["-c:v", "h264_nvenc", "-preset", "p4"])
+                elif hw_accel["type"] == "intel":
+                    ffmpeg_cmd_parts.extend(["-c:v", "h264_qsv"])
+                elif hw_accel["type"] == "vaapi":
+                    ffmpeg_cmd_parts.extend(["-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi"])
+                elif hw_accel["type"] == "videotoolbox":
+                    ffmpeg_cmd_parts.extend(["-c:v", "h264_videotoolbox"])
+            else:
+                # Video kodlayıcı - copy kullan (yeniden kodlama yapmadan)
+                ffmpeg_cmd_parts.extend(["-c:v", "copy"])
+            
+            # Ses kodlayıcı
+            ffmpeg_cmd_parts.extend(["-c:a", "aac", "-b:a", "256k"])
+            
+            # Çıkış dosyası
+            ffmpeg_cmd_parts.append(os.path.abspath(audio_video))
+            
+            # Komut dizesini oluştur
+            audio_cmd = " ".join([f'"{p}"' if " " in str(p) else str(p) for p in ffmpeg_cmd_parts])
             
             try:
                 subprocess.run(audio_cmd, shell=True, check=True)
@@ -169,9 +392,9 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
                     raise Exception("Ses eklenmiş video oluşturulamadı")
             except Exception as e:
                 print(f"Ses ekleme hatası: {str(e)}")
-                # Alternatif yöntem dene
+                # Alternatif yöntem dene - daha basit parametre seti kullanarak
                 try:
-                    alt_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(merged_audio)}" -c:v copy -c:a aac -strict experimental "{os.path.abspath(audio_video)}"'
+                    alt_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(merged_audio)}" -c:v copy -c:a aac -shortest "{os.path.abspath(audio_video)}"'
                     subprocess.run(alt_cmd, shell=True, check=True)
                     
                     if os.path.exists(audio_video) and os.path.getsize(audio_video) > 0:
@@ -199,20 +422,18 @@ def merge_audio(video_path: str, audio_files: List[str], project_folder: str) ->
             if os.path.exists(os.path.join(project_folder, "trimmed_video.mp4")):
                 os.remove(os.path.join(project_folder, "trimmed_video.mp4"))
         except Exception as e:
-            print(f"Geçici dosya silme hatası: {str(e)}")
+            print(f"Geçici dosya temizleme hatası: {str(e)}")
         
         return audio_video
-        
+    
     except Exception as e:
-        print(f"Ses birleştirme genel hatası: {str(e)}")
+        print(f"Audio merger genel hatası: {str(e)}")
         # Hata durumunda orijinal videoyu kopyala
+        audio_video = os.path.join(project_folder, "video_with_audio.mp4")
         try:
-            audio_video = os.path.join(project_folder, "video_with_audio.mp4")
             shutil.copy2(video_path, audio_video)
-            return audio_video
-        except Exception as copy_error:
-            print(f"Dosya kopyalama hatası: {str(copy_error)}")
-            # Son çare - boş dosya
-            with open(os.path.join(project_folder, "video_with_audio.mp4"), 'wb') as f:
+        except:
+            # En son çare, boş bir dosya oluştur
+            with open(audio_video, 'wb') as f:
                 f.write(b'')
-            return os.path.join(project_folder, "video_with_audio.mp4")
+        return audio_video

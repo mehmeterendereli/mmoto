@@ -7,12 +7,111 @@ import random
 import json
 import shutil
 from typing import List, Tuple
+import concurrent.futures
+import multiprocessing
+
+# Global olarak tanımlanan video işleme fonksiyonu
+def process_single_video(ffmpeg_path, ffprobe_path, i, video_path, resolution, max_clip_duration, project_folder):
+    """
+    Tek bir videoyu işleyen fonksiyon
+    
+    Args:
+        ffmpeg_path (str): FFmpeg yolu
+        ffprobe_path (str): FFprobe yolu
+        i (int): Video indeksi
+        video_path (str): İşlenecek video dosyasının yolu
+        resolution (Tuple[int, int]): Hedef çözünürlük
+        max_clip_duration (float): Maksimum clip süresi
+        project_folder (str): Proje klasörü
+        
+    Returns:
+        tuple: (output_file, clip_duration) veya None
+    """
+    if not os.path.exists(video_path):
+        print(f"Video dosyası bulunamadı: {video_path}")
+        return None
+    
+    # Video boyutlarını al
+    try:
+        probe_cmd = f'"{ffprobe_path}" -v error -select_streams v:0 -show_entries stream=width,height -of json "{video_path}"'
+        result = subprocess.run(probe_cmd, shell=True, capture_output=True, text=True)
+        info = json.loads(result.stdout)
+        width = int(info["streams"][0]["width"])
+        height = int(info["streams"][0]["height"])
+        
+        # Video süresini al
+        duration_cmd = f'"{ffprobe_path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{video_path}"'
+        result = subprocess.run(duration_cmd, shell=True, capture_output=True, text=True)
+        original_duration = float(result.stdout.strip())
+        
+        # Video sayısına göre hesaplanan maksimum süreyi kullan
+        clip_duration = min(original_duration, max_clip_duration)
+        
+        # Eğer video 10 saniyeden uzunsa, ortasından 10 saniye al
+        if original_duration > 10.0:
+            # Videonun ortasından başla
+            start_time = (original_duration - clip_duration) / 2
+        else:
+            # Kısa videolarda baştan başla
+            start_time = 0
+        
+        # Çıktı dosyasının yolu
+        output_file = os.path.join(project_folder, f"scaled_video_{i+1}.mp4")
+        
+        # 9:16 dikey video için
+        if resolution[0] / resolution[1] == 9/16:  # 9:16 formatı (dikey video)
+            try:
+                # Videonun orijinal en-boy oranını koru, ancak 9:16 formatına uydur
+                if width / height > 9/16:  # Video daha geniş (tipik 16:9 formatı)
+                    # Yeni yaklaşım: Video içeriğini 1:1 olarak al, üst ve alt kısımları bulanıklaştırılmış video ile doldur
+                    # 1. Adım: Videoyu kare (1:1) formata kırp
+                    square_size = min(width, height)
+                    # Video genişse, en önemli içerik ortada olma ihtimali yüksek
+                    x_offset = int((width - square_size) / 2)
+                    y_offset = int((height - square_size) / 2)
+                    
+                    # 2. Adım: Orijinal videoyu bulanıklaştır ve 9:16 formata scale et
+                    # 3. Adım: Kare kırpılmış videoyu 9:16 formatın ortasına yerleştir
+                    # 4. Adım: SAR değerini 1:1 olarak ayarla
+                    blur_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -filter_complex ' + \
+                              f'"[0:v]crop={square_size}:{square_size}:{x_offset}:{y_offset},scale={resolution[0]}:{resolution[0]},setsar=1:1[fg]; ' + \
+                              f'[0:v]scale={resolution[0]}:{resolution[1]},boxblur=20:5,setsar=1:1[bg]; ' + \
+                              f'[bg][fg]overlay=(W-w)/2:({resolution[1]}-{resolution[0]})/2" ' + \
+                              f'-c:v libx264 -preset fast -crf 22 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
+                    
+                    crop_cmd = blur_cmd
+                else:  # Video daha dar veya tam 9:16, ölçeklendir
+                    scale_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -vf "scale={resolution[0]}:{resolution[1]},setsar=1:1" -c:v libx264 -preset fast -crf 22 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
+                    crop_cmd = scale_cmd
+                
+                print(f"Video işleniyor ({i+1}): {video_path}")
+                print(f"Kırpma: {start_time:.2f} saniyeden başlayarak {clip_duration:.2f} saniye")
+                subprocess.run(crop_cmd, shell=True, check=True)
+                
+                # İşlemi kontrol et
+                if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
+                    print(f"Video başarıyla işlendi: {output_file}, Süre: {clip_duration:.2f} saniye")
+                    return (output_file, clip_duration)
+                else:
+                    print(f"Video işlenemedi: {output_file}")
+                    return None
+            except Exception as e:
+                print(f"Video işleme hatası: {str(e)}")
+                return None
+        else:
+            print(f"Desteklenmeyen çözünürlük: {resolution}, 9:16 formatı gerekli")
+            return None
+            
+    except Exception as e:
+        print(f"Video bilgisi alınamadı veya dönüştürme hatası: {str(e)}")
+        return None
 
 def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_folder: str) -> str:
     """
     İndirilen videoları işler ve 9:16 formatına uygun hale getirir
     Her videodan maksimum 10 saniye alarak çeşitliliği artırır
     Ana konuyla ilgili videoları öncelikli olarak seçer
+    Paralel işleme ile performansı artırır
     
     Args:
         video_paths (List[str]): İşlenecek video dosyalarının yolları
@@ -153,90 +252,51 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
         
         print(f"Video sayısı: {total_videos}, her video için maksimum süre: {max_clip_duration:.2f} saniye")
         
-        # Her videoyu dönüştür
-        for i, video_path in enumerate(selected_videos):
-            if not os.path.exists(video_path):
-                print(f"Video dosyası bulunamadı: {video_path}")
-                continue
+        # Paralel işleme için video ve index'leri hazırla
+        video_index_pairs = list(enumerate(selected_videos))
+        
+        # İşlem sayısını belirle (CPU sayısı veya maksimum 4, hangisi küçükse)
+        max_workers = min(multiprocessing.cpu_count(), 4, len(video_index_pairs))
+        
+        print(f"Paralel işleme başlatılıyor, {max_workers} işlem kullanılacak")
+        
+        # Paralel işleme ile videoları dönüştür
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Her video için işleme başlat - Artık multiprocessing yerine threading kullanıyoruz
+            futures = [
+                executor.submit(
+                    process_single_video, 
+                    ffmpeg_path, 
+                    ffprobe_path, 
+                    i, 
+                    video_path, 
+                    resolution, 
+                    max_clip_duration, 
+                    project_folder
+                ) 
+                for i, video_path in video_index_pairs
+            ]
             
-            # Video boyutlarını al
-            try:
-                probe_cmd = f'"{ffprobe_path}" -v error -select_streams v:0 -show_entries stream=width,height -of json "{video_path}"'
-                result = subprocess.run(probe_cmd, shell=True, capture_output=True, text=True)
-                info = json.loads(result.stdout)
-                width = int(info["streams"][0]["width"])
-                height = int(info["streams"][0]["height"])
-                
-                # Video süresini al
-                duration_cmd = f'"{ffprobe_path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{video_path}"'
-                result = subprocess.run(duration_cmd, shell=True, capture_output=True, text=True)
-                original_duration = float(result.stdout.strip())
-                
-                # Video sayısına göre hesaplanan maksimum süreyi kullan
-                clip_duration = min(original_duration, max_clip_duration)
-                
-                # Eğer video 10 saniyeden uzunsa, ortasından 10 saniye al
-                if original_duration > 10.0:
-                    # Videonun ortasından başla
-                    start_time = (original_duration - clip_duration) / 2
-                else:
-                    # Kısa videolarda baştan başla
-                    start_time = 0
-                
-                # Toplam süreyi kontrol et
-                if total_duration + clip_duration > max_duration:
-                    print(f"Toplam süre sınırına ulaşıldı ({max_duration} saniye), kalan videolar atlanıyor.")
-                    break
-                
-                total_duration += clip_duration
-                
-            except Exception as e:
-                print(f"Video bilgisi alınamadı veya dönüştürme hatası: {str(e)}")
-                continue
-            
-            # Çıktı dosyasının yolu
-            output_file = os.path.join(project_folder, f"scaled_video_{i+1}.mp4")
-            
-            # 9:16 dikey video için
-            if resolution[0] / resolution[1] == 9/16:  # 9:16 formatı (dikey video)
-                try:
-                    # Videonun orijinal en-boy oranını koru, ancak 9:16 formatına uydur
-                    if width / height > 9/16:  # Video daha geniş (tipik 16:9 formatı)
-                        # Yeni yaklaşım: Video içeriğini 1:1 olarak al, üst ve alt kısımları bulanıklaştırılmış video ile doldur
-                        # 1. Adım: Videoyu kare (1:1) formata kırp
-                        square_size = min(width, height)
-                        # Video genişse, en önemli içerik ortada olma ihtimali yüksek
-                        x_offset = int((width - square_size) / 2)
-                        y_offset = int((height - square_size) / 2)
-                        
-                        # 2. Adım: Orijinal videoyu bulanıklaştır ve 9:16 formata scale et
-                        # 3. Adım: Kare kırpılmış videoyu 9:16 formatın ortasına yerleştir
-                        # 4. Adım: SAR değerini 1:1 olarak ayarla
-                        blur_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -filter_complex ' + \
-                                  f'"[0:v]crop={square_size}:{square_size}:{x_offset}:{y_offset},scale={resolution[0]}:{resolution[0]},setsar=1:1[fg]; ' + \
-                                  f'[0:v]scale={resolution[0]}:{resolution[1]},boxblur=20:5,setsar=1:1[bg]; ' + \
-                                  f'[bg][fg]overlay=(W-w)/2:({resolution[1]}-{resolution[0]})/2" ' + \
-                                  f'-c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
-                        
-                        crop_cmd = blur_cmd
-                    else:  # Video daha dar veya tam 9:16, ölçeklendir
-                        scale_cmd = f'"{ffmpeg_path}" -i "{video_path}" -ss {start_time:.2f} -t {clip_duration:.2f} -vf "scale={resolution[0]}:{resolution[1]},setsar=1:1" -c:v libx264 -preset medium -crf 18 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -y -b:v 5M -maxrate 5M -bufsize 5M "{output_file}"'
-                        crop_cmd = scale_cmd
+            # Sonuçları topla
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result:
+                    output_file, clip_duration = result
+                    processed_videos.append((output_file, clip_duration))
+                    total_duration += clip_duration
                     
-                    print(f"Video işleniyor ({i+1}/{len(selected_videos)}): {video_path}")
-                    print(f"Kırpma: {start_time:.2f} saniyeden başlayarak {clip_duration:.2f} saniye")
-                    subprocess.run(crop_cmd, shell=True, check=True)
-                    
-                    # İşlemi kontrol et
-                    if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
-                        processed_videos.append((output_file, clip_duration))
-                        print(f"Video başarıyla işlendi: {output_file}, Süre: {clip_duration:.2f} saniye")
-                    else:
-                        print(f"Video işlenemedi: {output_file}")
-                except Exception as e:
-                    print(f"Video işleme hatası: {str(e)}")
-            else:
-                print(f"Desteklenmeyen çözünürlük: {resolution}, 9:16 formatı gerekli")
+                    # Maksimum süreyi aştık mı kontrol et
+                    if total_duration >= max_duration:
+                        print(f"Toplam süre sınırına ulaşıldı ({max_duration} saniye)")
+                        # Kalan işlemleri iptal et
+                        for f in futures:
+                            if not f.done():
+                                f.cancel()
+                        break
+        
+        # Sonuçları video sürelerine göre sırala
+        processed_videos.sort(key=lambda x: x[1], reverse=True)
         
         if not processed_videos:
             raise ValueError("İşlenebilir video bulunamadı")
@@ -250,7 +310,6 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
             print(f"Toplam süre çok uzun ({total_duration:.2f} > {max_duration} saniye), bazı videolar çıkarılacak...")
             while processed_videos and total_duration > max_duration:
                 # En uzun videoyu çıkar
-                processed_videos.sort(key=lambda x: x[1], reverse=True)
                 removed_video, removed_duration = processed_videos.pop(0)
                 total_duration -= removed_duration
                 print(f"Video çıkarıldı: {removed_video}, Yeni toplam süre: {total_duration:.2f} saniye")
@@ -266,8 +325,8 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
             # Birleştirilmiş video yolu
             processed_video_path = os.path.join(project_folder, "processed_video.mp4")
             
-            # SAR değerini 1:1 olarak ayarla
-            concat_cmd = f'"{ffmpeg_path}" -f concat -safe 0 -i "{concat_list_path}" -vf "setsar=1:1" -c:v libx264 -preset medium -crf 20 -profile:v high -pix_fmt yuv420p -r 30 -vsync cfr -b:v 5M -maxrate 5M -bufsize 5M "{processed_video_path}"'
+            # SAR değerini 1:1 olarak ayarla ve hızlı preset kullan
+            concat_cmd = f'"{ffmpeg_path}" -f concat -safe 0 -i "{concat_list_path}" -vf "setsar=1:1" -c:v libx264 -preset fast -crf 22 -profile:v high -pix_fmt yuv420p -r 30 -vsync cfr -b:v 5M -maxrate 5M -bufsize 5M "{processed_video_path}"'
             
             try:
                 print("Videolar birleştiriliyor...")
@@ -296,7 +355,7 @@ def process_videos(video_paths: List[str], resolution: Tuple[int, int], project_
             video_path, _ = processed_videos[0]
             
             # SAR değerini 1:1 olarak ayarla
-            sar_cmd = f'"{ffmpeg_path}" -i "{video_path}" -vf "setsar=1:1" -c:v libx264 -preset medium -crf 20 -profile:v high -pix_fmt yuv420p -r 30 -b:v 5M -maxrate 5M -bufsize 5M "{processed_video_path}"'
+            sar_cmd = f'"{ffmpeg_path}" -i "{video_path}" -vf "setsar=1:1" -c:v libx264 -preset fast -crf 22 -profile:v high -pix_fmt yuv420p -r 30 -b:v 5M -maxrate 5M -bufsize 5M "{processed_video_path}"'
             subprocess.run(sar_cmd, shell=True, check=True)
             
             return processed_video_path
@@ -347,8 +406,8 @@ def create_empty_video(project_folder: str, resolution: Tuple[int, int], ffmpeg_
                 with open(os.path.join(project_folder, "processed_video.mp4"), 'wb') as f:
                     f.write(b'')
         except Exception as e:
-            print(f"Yedek video oluşturma hatası: {str(e)}")
-            # Son çare olarak boş dosya oluştur
+            print(f"Örnek video kopyalama hatası: {str(e)}")
+            # Son çare - boş dosya oluştur
             try:
                 with open(os.path.join(project_folder, "processed_video.mp4"), 'wb') as f:
                     f.write(b'')
