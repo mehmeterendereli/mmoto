@@ -95,16 +95,16 @@ def generate_topic(api_key, category=None):
         MÜKEMMEL BİR YOUTUBE SHORTS BAŞLIĞI ÜRET.
 
         BAŞLIK KRİTERLERİ:
-        1. ZORUNLU: "🤯" veya "😱" içeren ŞOK EDİCİ bir başlık olmalı
+        1. ZORUNLU: Oldukça ilgi çekici bir başlık olmalı
         2. Başlıkta mutlaka BÜYÜK HARFLER kullanılmalı
         3. Başlık izleyiciyi HEMEN tıklatacak kadar merak uyandırmalı
-        4. Şu kelimelerden birini içermeli: "İNANILMAZ", "ŞOKE", "SIR", "GİZLİ", "YASAKLI", veya "İMKANSIZ"
+        4. İnsanlarda merak uyandırıcı olmalı
         5. Şu formatlardan birini kullan (ama tam olarak kopyalama, sadece ilham al):
-           - "HERKES ŞOKTA! [konu] Hakkında İNANILMAZ Gerçek! 😱"
-           - "KİMSE BİLMİYORDU! [konu] Hakkındaki GİZLİ SIR! 🤯"
-           - "BAKMAYI BIRAKAMAYACAKSIN! [konu] Nasıl [şaşırtıcı şey yapıyor]? 😱"
+           - "HERKES ŞOKTA! [konu] "
+           - "KİMSE BİLMİYORDU! [konu]"
+           - " [konu] Nasıl [şaşırtıcı şey yapıyor]? "
            - "EĞER [konu] Hakkında Bunu Bilmiyorsan HER ŞEYİ YANLIŞ Yapıyorsun! 🤯"
-           - "BİLİM İNSANLARI ŞOK! [konu] Aslında [beklenmedik durum]... 😱"
+           - " [konu] Aslında [beklenmedik durum]... 😱"
         6. Toplam 5-10 kelime arasında olmalı
         7. Başlık %100 Türkçe olmalı
         8. Kategori: {category}

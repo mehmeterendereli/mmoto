@@ -217,7 +217,7 @@ def create_subtitle_files(timings: List[Dict[str, Any]], project_folder: str, vi
                 end = start + 0.15
                 
             # Kelime uzunluğuna göre font boyutu - daha görünür olması için her kelime büyük boyutta
-            font_size = "18" if len(word["word"]) <= 6 else "15" if len(word["word"]) <= 10 else "12"
+            font_size = "13" if len(word["word"]) <= 6 else "12" if len(word["word"]) <= 10 else "10"
             
             # SRT dosyasına yaz - gelişmiş stil etiketi
             srt_file.write(f"{i}\n")
@@ -524,7 +524,7 @@ def render_subtitles(video_path: str, lines: List[str], timings: List[Dict[str, 
                                     text = translated_words[i]
                                     
                                     # Büyük fontlu, beyaz yazı, siyah arka plan
-                                    styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
+                                    styled_text = f'<font size="13" color="white"><b>{text}</b></font>'
                                     
                                     # SRT girişini yaz
                                     srt_file.write(f"{i+1}\n")
@@ -1082,7 +1082,7 @@ def create_word_by_word_video(video_path: str, timings_json_path: str = None, ou
                 text = translated_words[i]
                 
                 # Büyük fontlu, beyaz yazı, siyah arka plan
-                styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
+                styled_text = f'<font size="13" color="white"><b>{text}</b></font>'
                 
                 # SRT girişini yaz
                 srt_file.write(f"{i+1}\n")
@@ -1103,7 +1103,7 @@ def create_word_by_word_video(video_path: str, timings_json_path: str = None, ou
                 text = word["word"].strip()
                 
                 # Büyük fontlu, beyaz yazı, siyah arka plan
-                styled_text = f'<font size="18" color="white"><b>{text}</b></font>'
+                styled_text = f'<font size="13" color="white"><b>{text}</b></font>'
                 
                 # SRT girişini yaz
                 srt_file.write(f"{i}\n")

@@ -59,7 +59,7 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
         print("Kapanış sahnesi ekleniyor...")
         
         # SAR değerlerini düzeltmek için önce her iki videoyu setsar=1:1 ile işle
-        filter_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(closing_video_path)}" -filter_complex "[0:v]setsar=1:1[v1]; [1:v]setsar=1:1[v2]; [v1][0:a:0][v2][1:a:0]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac "{os.path.abspath(final_video)}"'
+        filter_cmd = f'"{ffmpeg_path}" -y -i "{os.path.abspath(video_path)}" -i "{os.path.abspath(closing_video_path)}" -filter_complex "[0:v]setsar=1:1[v1]; [1:v]setsar=1:1[v2]; [v1][0:a][v2][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -strict experimental "{os.path.abspath(final_video)}"'
         
         try:
             # Direct filter_complex yöntemi
@@ -82,8 +82,8 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
             video2_ts = os.path.join(project_folder, "video2.ts")
             
             # Videoları TS formatına setsar=1:1 filtresi ile dönüştür
-            ts1_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video1_ts)}"'
-            ts2_cmd = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video2_ts)}"'
+            ts1_cmd = f'"{ffmpeg_path}" -y -i "{os.path.abspath(video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a aac -strict experimental -ac 2 -ar 44100 -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video1_ts)}"'
+            ts2_cmd = f'"{ffmpeg_path}" -y -i "{os.path.abspath(closing_video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a aac -strict experimental -ac 2 -ar 44100 -bsf:v h264_mp4toannexb -f mpegts "{os.path.abspath(video2_ts)}"'
             
             try:
                 # Video 1 TS'e dönüştür
@@ -92,7 +92,7 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
                 subprocess.run(ts2_cmd, shell=True, check=True)
                 
                 # İki TS dosyasını birleştir, ses kanalını koru
-                concat_cmd = f'"{ffmpeg_path}" -i "concat:{os.path.abspath(video1_ts)}|{os.path.abspath(video2_ts)}" -c:v copy -c:a copy -bsf:a aac_adtstoasc "{os.path.abspath(final_video)}"'
+                concat_cmd = f'"{ffmpeg_path}" -y -i "concat:{os.path.abspath(video1_ts)}|{os.path.abspath(video2_ts)}" -c:v copy -c:a aac -strict experimental -ac 2 -ar 44100 "{os.path.abspath(final_video)}"'
                 subprocess.run(concat_cmd, shell=True, check=True)
                 
                 # Başarılı mı kontrol et
@@ -122,8 +122,8 @@ def add_closing_scene(video_path: str, closing_video_path: str, project_folder: 
                     fixed_closing = os.path.join(project_folder, "fixed_closing.mp4")
                     
                     # SAR değerlerini düzelt
-                    fix_cmd1 = f'"{ffmpeg_path}" -i "{os.path.abspath(video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy "{os.path.abspath(fixed_video)}"'
-                    fix_cmd2 = f'"{ffmpeg_path}" -i "{os.path.abspath(closing_video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a copy "{os.path.abspath(fixed_closing)}"'
+                    fix_cmd1 = f'"{ffmpeg_path}" -y -i "{os.path.abspath(video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a aac -strict experimental -ac 2 -ar 44100 "{os.path.abspath(fixed_video)}"'
+                    fix_cmd2 = f'"{ffmpeg_path}" -y -i "{os.path.abspath(closing_video_path)}" -vf "setsar=1:1" -c:v libx264 -c:a aac -strict experimental -ac 2 -ar 44100 "{os.path.abspath(fixed_closing)}"'
                     
                     subprocess.run(fix_cmd1, shell=True, check=True)
                     subprocess.run(fix_cmd2, shell=True, check=True)

@@ -85,7 +85,7 @@ def generate_content(topic: str, language: str = "tr") -> Dict[str, Any]:
                 Kritik Kurallar:
                 1. İLK CÜMLE MUTLAKA İZLEYİCİYİ ŞAŞIRTACAK, ŞOK EDECEK veya çok merak uyandıracak bir bilgi/iddia içermeli
                 2. İkinci cümle ilk cümledeki şaşırtıcı bilgiyi desteklemeli veya daha da ilginç hale getirmeli
-                3. Diğer cümleler "ama asıl şaşırtıcı olan şu ki...", "kimsenin bilmediği gerçek şu...", "inanılmaz olan ise..." gibi ilgi çekici ifadelerle başlamalı
+                3. Diğer cümleler ilgi çekici ifadelerle başlamalı
                 4. Her cümle ayrı bir paragraf olmalı, liste veya numaralandırılmış öğeler kullanma
                 5. Toplam 7 cümle ve tüm metin seslendirildiğinde yaklaşık 45 saniye sürmelidir (ASLA 50 saniyeyi geçmemeli)
                 6. Her cümle anlamlı ve eğitici olmalı, fakat abartılı ve dramatik bir dil kullanılmalı

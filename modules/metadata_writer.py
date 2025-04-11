@@ -45,7 +45,7 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         {full_content}
         
         Aşağıdakileri oluştur:
-        1. ŞOK EDİCİ, çok merak uyandıran ve HEMEN tıklanacak bir başlık (max 60 karakter). Başlık mutlaka BÜYÜK HARFLER içermeli ve şaşkın emoji(ler) kullanmalı. İzleyicilerin geçip gitmesini ASLA istemiyoruz!
+        1. Merak uyandıran ve HEMEN tıklanacak bir başlık (max 60 karakter). Başlık ilgi çekici olmalı. İzleyicilerin geçip gitmesini ASLA istemiyoruz!
         2. İzleyiciyi hemen yakalayacak açıklama. Her cümle başlığı desteklemeli ve merak uyandırmalı. Sonda mutlaka uygun hashtag'ler olmalı.
         3. Viral olacak 8-10 ilgili etiket (tek kelimeler veya kısa ifadeler, hashtagsiz)
         4. En uygun YouTube kategori kimliğini şu listeden seç:
@@ -84,7 +84,7 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         
         # Ensure values exist and are properly formatted
         if "title" not in metadata or not metadata["title"]:
-            metadata["title"] = f"ŞOKE EDECEK {topic.title()} GERÇEKLER! 😱🤯"
+            metadata["title"] = f"ŞOKE EDECEK {topic.title()} GERÇEKLER!"
             
         if "description" not in metadata or not metadata["description"]:
             metadata["description"] = "\n\n".join(content) + "\n\n#Shorts #Educational #Knowledge #Viral #MustWatch"
@@ -101,7 +101,7 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         print(f"Error generating YouTube metadata: {str(e)}")
         # Fallback metadata
         return {
-            "title": f"ŞOKE EDECEK {topic.title()} GERÇEKLER! 😱🤯",
+            "title": f"ŞOK  {topic.title()}",
             "description": "\n\n".join(content) + "\n\n#Shorts #Viral #MustWatch #Educational",
             "tags": ["viral", "shorts", "facts", "mustwatch", "trending"] + topic.lower().split(),
             "category_id": "27"  # Education
