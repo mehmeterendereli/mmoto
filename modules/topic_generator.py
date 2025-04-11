@@ -100,11 +100,11 @@ def generate_topic(api_key, category=None):
         3. Başlık izleyiciyi HEMEN tıklatacak kadar merak uyandırmalı
         4. İnsanlarda merak uyandırıcı olmalı
         5. Şu formatlardan birini kullan (ama tam olarak kopyalama, sadece ilham al):
-           - "HERKES ŞOKTA! [konu] "
+           - "Dikkat [konu] "
            - "KİMSE BİLMİYORDU! [konu]"
            - " [konu] Nasıl [şaşırtıcı şey yapıyor]? "
            - "EĞER [konu] Hakkında Bunu Bilmiyorsan HER ŞEYİ YANLIŞ Yapıyorsun! 🤯"
-           - " [konu] Aslında [beklenmedik durum]... 😱"
+           - " [konu] Aslında [beklenmedik durum]... "
         6. Toplam 5-10 kelime arasında olmalı
         7. Başlık %100 Türkçe olmalı
         8. Kategori: {category}
@@ -118,7 +118,7 @@ def generate_topic(api_key, category=None):
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Sen viral YouTube Shorts başlıkları üreten bir uzmansın. Başlık üretirken emoji kullanmayı asla unutma. Başlıklar çok şok edici olmalı."},
+                {"role": "system", "content": "Sen viral YouTube Shorts başlıkları üreten bir uzmansın. Başlık üretirken emoji kullanmayı asla unutma. Başlıklar dikkat çekici olmalı."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.9,

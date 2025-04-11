@@ -26,7 +26,7 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         if not api_key:
             # Fallback if no API key
             return {
-                "title": f"ŞOKE EDECEK {topic.title()} GERÇEKLER",
+                "title": f"İlginç {topic.title()} GERÇEKLER",
                 "description": "\n\n".join(content) + "\n\n#Shorts #Educational #Knowledge",
                 "tags": ["educational", "shorts", "facts", "knowledge"] + topic.lower().split()
             }
@@ -84,7 +84,7 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         
         # Ensure values exist and are properly formatted
         if "title" not in metadata or not metadata["title"]:
-            metadata["title"] = f"ŞOKE EDECEK {topic.title()} GERÇEKLER!"
+            metadata["title"] = f"işte {topic.title()} GERÇEKLER!"
             
         if "description" not in metadata or not metadata["description"]:
             metadata["description"] = "\n\n".join(content) + "\n\n#Shorts #Educational #Knowledge #Viral #MustWatch"
@@ -101,7 +101,7 @@ def generate_youtube_metadata(topic: str, content: List[str], api_key: str) -> D
         print(f"Error generating YouTube metadata: {str(e)}")
         # Fallback metadata
         return {
-            "title": f"ŞOK  {topic.title()}",
+            "title": f"Bak  {topic.title()}",
             "description": "\n\n".join(content) + "\n\n#Shorts #Viral #MustWatch #Educational",
             "tags": ["viral", "shorts", "facts", "mustwatch", "trending"] + topic.lower().split(),
             "category_id": "27"  # Education

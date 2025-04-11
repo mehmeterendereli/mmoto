@@ -77,13 +77,13 @@ def generate_content(topic: str, language: str = "tr") -> Dict[str, Any]:
         # Set language-specific settings
         lang_settings = {
             "tr": {
-                "system_message": "Sen TikTok ve YouTube Shorts için viral içerik üreten bir uzmansın. İnsanların dikkatini hemen çekecek şok edici, merak uyandırıcı ve ilgi çekici içerikler yaratmada ustasın.",
+                "system_message": "Sen TikTok ve YouTube Shorts için viral içerik üreten bir uzmansın. İnsanların dikkatini hemen çekecek, merak uyandırıcı ve ilgi çekici içerikler yaratmada ustasın.",
                 "prompt_template": f"""
                 {topic} hakkında viral olabilecek, ilgi çekici ve merak uyandıran bir içerik yaz.
                 Bu içerik YouTube Shorts veya TikTok'ta seslendirilecek.
                 
                 Kritik Kurallar:
-                1. İLK CÜMLE MUTLAKA İZLEYİCİYİ ŞAŞIRTACAK, ŞOK EDECEK veya çok merak uyandıracak bir bilgi/iddia içermeli
+                1. İLK CÜMLE MUTLAKA İZLEYİCİYİ ŞAŞIRTACAK, çok merak uyandıracak bir bilgi/iddia içermeli
                 2. İkinci cümle ilk cümledeki şaşırtıcı bilgiyi desteklemeli veya daha da ilginç hale getirmeli
                 3. Diğer cümleler ilgi çekici ifadelerle başlamalı
                 4. Her cümle ayrı bir paragraf olmalı, liste veya numaralandırılmış öğeler kullanma
